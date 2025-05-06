@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reynolds's Boids Simulation</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Reynolds's Boids Simulation</h1>
+      <div class="controls">
+        <div class="control-group">
+          <label for="separation">Separation:</label>
+          <input
+            type="range"
+            id="separation"
+            min="0"
+            max="5"
+            step="0.1"
+            value="1.5"
+          />
+          <span id="separation-value">1.5</span>
+        </div>
+        <div class="control-group">
+          <label for="alignment">Alignment:</label>
+          <input
+            type="range"
+            id="alignment"
+            min="0"
+            max="5"
+            step="0.1"
+            value="1.0"
+          />
+          <span id="alignment-value">1.0</span>
+        </div>
+        <div class="control-group">
+          <label for="cohesion">Cohesion:</label>
+          <input
+            type="range"
+            id="cohesion"
+            min="0"
+            max="5"
+            step="0.1"
+            value="1.0"
+          />
+          <span id="cohesion-value">1.0</span>
+        </div>
+        <button id="reset-btn">Reset</button>
+        <button id="audio-btn" class="audio-off">🔇 Sound Off</button>
+        <button id="eraser-btn">🧽 Eraser</button>
+        <button id="clear-walls-btn">🧹 Clear Walls</button>
+      </div>
+      <canvas id="boids-canvas"></canvas>
+    </div>
+    <script src="boid.js"></script>
+    <script src="audio.js"></script>
+    <script src="simulation.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
