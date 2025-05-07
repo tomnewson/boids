@@ -98,6 +98,20 @@
         padding: 8px 12px;
         font-size: 14px;
       }
+      /* Add basic styles for the new brush control panel */
+      .brush-controls {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background-color: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+        padding: 10px;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
     </style>
     <!-- Regular stylesheet loads after for complete styling -->
     <link rel="stylesheet" href="styles.css" />
@@ -162,13 +176,6 @@
           >
             🔇
           </button>
-          <button
-            id="eraser-btn"
-            class="icon-btn"
-            title="Switch to Eraser Mode"
-          >
-            🧽
-          </button>
           <button id="clear-walls-btn" class="text-btn" title="Clear Walls">
             Clear Walls
           </button>
@@ -176,6 +183,16 @@
       </div>
       <button id="minimize-btn" class="icon-btn minimize-btn">−</button>
     </div>
+
+    <!-- New brush controls panel in the bottom left -->
+    <div class="brush-controls">
+      <button id="eraser-btn" class="icon-btn" title="Switch to Eraser Mode">
+        🧽
+      </button>
+      <button id="brush-btn-1" class="icon-btn" title="Brush Tool 1">🖌️</button>
+      <button id="brush-btn-2" class="icon-btn" title="Brush Tool 2">🧬</button>
+    </div>
+
     <!-- Use defer to ensure CSS is loaded before scripts run -->
     <script src="boid.js" defer></script>
     <script src="audio.js" defer></script>

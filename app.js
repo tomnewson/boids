@@ -28,7 +28,7 @@ window.onload = () => {
     // Create configuration object
     const config = {
       useHighPerformanceMode: true,
-      boidCount: 100,
+      boidCount: 0,
       targetFPS: 60,
     };
 
@@ -82,6 +82,10 @@ window.onload = () => {
     const minimizeBtn = document.getElementById("minimize-btn");
     const floatingControls = document.querySelector(".floating-controls");
 
+    // New brush control buttons
+    const brushBtn1 = document.getElementById("brush-btn-1");
+    const brushBtn2 = document.getElementById("brush-btn-2");
+
     // Initialize minimize state
     let isMinimized = false;
 
@@ -132,17 +136,71 @@ window.onload = () => {
       }
     }
 
+    // Clear active state from all brush buttons
+    function clearActiveBrushes() {
+      eraserBtn.classList.remove("active");
+      brushBtn1.classList.remove("active");
+      brushBtn2.classList.remove("active");
+    }
+
     // Toggle eraser mode
     function toggleEraser() {
+      clearActiveBrushes();
+
+      // Exit boid spawner mode if active
+      if (simulation.spawnBoidMode) {
+        simulation.toggleBoidSpawner();
+      }
+
       const eraserActive = simulation.toggleEraserMode();
       if (eraserActive) {
-        // Now in eraser mode, show drawing icon to indicate clicking will switch to draw mode
-        eraserBtn.textContent = "✏️";
-        eraserBtn.title = "Switch to Drawing Mode";
+        // Now in eraser mode
+        eraserBtn.classList.add("active");
+        eraserBtn.title = "Eraser Mode Active";
       } else {
-        // Now in drawing mode, show eraser icon to indicate clicking will switch to eraser mode
-        eraserBtn.textContent = "🧽";
+        // Now in drawing mode
+        brushBtn1.classList.add("active");
         eraserBtn.title = "Switch to Eraser Mode";
+      }
+    }
+
+    // Toggle to brush tool 1 (default drawing mode)
+    function toggleBrush1() {
+      clearActiveBrushes();
+
+      // Exit any special modes
+      if (simulation.eraserMode) {
+        simulation.toggleEraserMode();
+      }
+      if (simulation.spawnBoidMode) {
+        simulation.toggleBoidSpawner();
+      }
+
+      // Add active class to brush 1 button
+      brushBtn1.classList.add("active");
+      brushBtn1.title = "Wall Drawing Mode Active";
+    }
+
+    // Toggle to boid spawner tool
+    function toggleBoidSpawner() {
+      clearActiveBrushes();
+
+      // Exit eraser mode if active
+      if (simulation.eraserMode) {
+        simulation.toggleEraserMode();
+      }
+
+      // Toggle boid spawner mode
+      const spawnerActive = simulation.toggleBoidSpawner();
+
+      if (spawnerActive) {
+        // Now in boid spawner mode
+        brushBtn2.classList.add("active");
+        brushBtn2.title = "Boid Spawner Active";
+      } else {
+        // Switch back to default brush
+        brushBtn1.classList.add("active");
+        brushBtn2.title = "Switch to Boid Spawner";
       }
     }
 
@@ -173,11 +231,25 @@ window.onload = () => {
     resetBtn.addEventListener("click", () => simulation.reset());
     audioBtn.addEventListener("click", toggleAudio);
     eraserBtn.addEventListener("click", toggleEraser);
+    brushBtn1.addEventListener("click", toggleBrush1);
+    brushBtn2.addEventListener("click", toggleBoidSpawner);
     clearWallsBtn.addEventListener("click", clearWalls);
     minimizeBtn.addEventListener("click", toggleMinimize);
 
     // Initialize parameter display
     updateParams();
+
+    // Set boid spawner as the default active tool instead of the wall drawing tool
+    clearActiveBrushes();
+    brushBtn2.classList.add("active");
+    brushBtn2.title = "Boid Spawner Active";
+
+    // Activate boid spawner mode in the simulation
+    simulation.toggleBoidSpawner();
+
+    // Update button titles for better UI feedback
+    brushBtn1.title = "Wall Drawing Mode (Default)";
+    brushBtn2.title = "Switch to Boid Spawner";
   } catch (error) {
     console.error("Error initializing simulation:", error);
   }

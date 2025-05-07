@@ -24,8 +24,8 @@ class Simulation {
         config.useHighPerformanceMode !== undefined
           ? config.useHighPerformanceMode
           : true,
-      // Always use default boid count (100) regardless of device
-      boidCount: 100,
+      // Set default boid count to 0 instead of 100
+      boidCount: config.boidCount !== undefined ? config.boidCount : 0,
       targetFPS: config.targetFPS || 60,
     };
 
@@ -43,6 +43,7 @@ class Simulation {
     this.lastDrawPoint = null; // Last point where brush was drawn
     this.minDrawDistance = 2; // Significantly reduced for continuous walls
     this.eraserMode = false; // Track if we're in eraser mode
+    this.spawnBoidMode = false; // Track if we're in boid spawning mode
     this.eraserSize = this.wallBrushSize * 3; // Size of eraser relative to brush size
 
     // Set cursor to crosshair by default since drawing is always enabled
@@ -65,7 +66,7 @@ class Simulation {
     // Set canvas dimensions
     this.resizeCanvas();
 
-    // Create initial boids
+    // Create initial boids (now 0 by default)
     this.initBoids(this.config.boidCount);
 
     // Set up wall drawing event listeners
@@ -183,6 +184,9 @@ class Simulation {
       if (this.eraserMode) {
         // In eraser mode, we immediately erase at this point
         this.eraseWallsAt(coords.x, coords.y);
+      } else if (this.spawnBoidMode) {
+        // In spawn boid mode, create a new boid
+        this.spawnBoid(coords.x, coords.y);
       } else {
         // In draw mode, start a new wall
         this.currentWall = [];
@@ -202,6 +206,16 @@ class Simulation {
         // Only erase if mouse is pressed (button is being held down)
         if (e.buttons > 0) {
           this.eraseWallsAt(coords.x, coords.y);
+        }
+      } else if (this.spawnBoidMode) {
+        // Only spawn boids if mouse is pressed and being dragged
+        if (e.buttons > 0) {
+          // Don't spawn boids too close together - limit by time
+          const now = Date.now();
+          if (!this.lastBoidSpawnTime || now - this.lastBoidSpawnTime > 100) {
+            this.spawnBoid(coords.x, coords.y);
+            this.lastBoidSpawnTime = now;
+          }
         }
       } else if (this.currentWall) {
         // In draw mode, continue drawing the current wall
@@ -267,6 +281,9 @@ class Simulation {
         this.eraseWallsAt(coords.x, coords.y);
         // Save the last touch position for eraser interpolation
         this.lastDrawPoint = coords;
+      } else if (this.spawnBoidMode) {
+        // In spawn boid mode, create a new boid
+        this.spawnBoid(coords.x, coords.y);
       } else {
         this.currentWall = [];
         this.lastDrawPoint = coords;
@@ -306,6 +323,13 @@ class Simulation {
           }
 
           this.lastDrawPoint = coords;
+        }
+      } else if (this.spawnBoidMode) {
+        // Spawn boids while touch is moving
+        const now = Date.now();
+        if (!this.lastBoidSpawnTime || now - this.lastBoidSpawnTime > 100) {
+          this.spawnBoid(coords.x, coords.y);
+          this.lastBoidSpawnTime = now;
         }
       } else if (this.currentWall) {
         // Calculate distance from last point
@@ -406,21 +430,68 @@ class Simulation {
   toggleEraserMode() {
     this.eraserMode = !this.eraserMode;
 
-    // Update cursor based on mode
-    if (this.eraserMode) {
-      this.canvas.style.cursor =
-        'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff000055"/></svg>\') 12 12, auto';
-    } else {
-      this.canvas.style.cursor = "crosshair";
+    // Exit spawn boid mode if it was active
+    if (this.eraserMode && this.spawnBoidMode) {
+      this.spawnBoidMode = false;
     }
+
+    // Update cursor based on mode
+    this.updateCursor();
 
     return this.eraserMode;
   }
 
-  // Erase wall points at the given coordinates
+  // Toggle boid spawner mode
+  toggleBoidSpawner() {
+    this.spawnBoidMode = !this.spawnBoidMode;
+
+    // Exit eraser mode if it was active
+    if (this.spawnBoidMode && this.eraserMode) {
+      this.eraserMode = false;
+    }
+
+    // Update cursor based on mode
+    this.updateCursor();
+
+    return this.spawnBoidMode;
+  }
+
+  // Update cursor appearance based on current mode
+  updateCursor() {
+    if (this.eraserMode) {
+      this.canvas.style.cursor =
+        'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff000055"/></svg>\') 12 12, auto';
+    } else if (this.spawnBoidMode) {
+      this.canvas.style.cursor =
+        'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%2300ff0055"/><circle cx="12" cy="12" r="4" fill="%2300ff00aa"/></svg>\') 12 12, auto';
+    } else {
+      this.canvas.style.cursor = "crosshair";
+    }
+  }
+
+  // Spawn a new boid at the given coordinates
+  spawnBoid(x, y) {
+    if (this.spawnBoidMode) {
+      // Create a new boid at the specified position
+      const newBoid = new Boid(x, y, this.canvas);
+
+      // Add some initial velocity in a random direction
+      const angle = Math.random() * Math.PI * 2;
+      newBoid.velocity.x = Math.cos(angle) * newBoid.maxSpeed * 0.5;
+      newBoid.velocity.y = Math.sin(angle) * newBoid.maxSpeed * 0.5;
+
+      // Add the new boid to the simulation
+      this.boids.push(newBoid);
+
+      // Force the boid to update once to ensure it's properly initialized
+      newBoid.update(1.0);
+    }
+  }
+
+  // Erase wall points and boids at the given coordinates
   eraseWallsAt(x, y) {
     const eraseRadiusSquared = Math.pow(this.eraserSize, 2);
-    let modified = false;
+    let wallsModified = false;
 
     // Check each wall collection
     for (let w = 0; w < this.walls.length; w++) {
@@ -437,15 +508,40 @@ class Simulation {
 
       // Check if we modified this wall
       if (this.walls[w].length !== originalLength) {
-        modified = true;
+        wallsModified = true;
       }
     }
 
     // Remove any empty wall collections
-    if (modified) {
+    if (wallsModified) {
       this.walls = this.walls.filter((wall) => wall.length > 0);
       this.wallNeedsUpdate = true; // Mark walls for redraw
     }
+
+    // Also remove any boids within the eraser radius
+    const boidsRemoved = this.eraseBoids(x, y, eraseRadiusSquared);
+
+    return wallsModified || boidsRemoved;
+  }
+
+  // Remove boids within the specified radius
+  eraseBoids(x, y, radiusSquared) {
+    if (!this.eraserMode) return false;
+
+    const originalLength = this.boids.length;
+
+    // Filter out boids that are within the eraser radius
+    this.boids = this.boids.filter((boid) => {
+      const dx = boid.position.x - x;
+      const dy = boid.position.y - y;
+      const distSquared = dx * dx + dy * dy;
+
+      // Keep boids that are outside the eraser radius
+      return distSquared > radiusSquared;
+    });
+
+    // Return true if any boids were removed
+    return this.boids.length < originalLength;
   }
 
   // Clear all walls

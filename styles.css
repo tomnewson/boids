@@ -37,6 +37,23 @@ body {
   transition: none;
 }
 
+/* Brush controls panel */
+.brush-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(0, 0, 0, 0.7);
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+  padding: 15px;
+  z-index: 100;
+  backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+}
+
 .controls {
   display: flex;
   flex-direction: column;
@@ -144,6 +161,12 @@ span {
   transform: scale(1.05);
 }
 
+/* Active state for tool buttons */
+.icon-btn.active {
+  border-color: rgba(155, 89, 182, 0.8);
+  background-color: rgba(155, 89, 182, 0.2);
+}
+
 /* Text buttons */
 .text-btn {
   background-color: transparent;
@@ -223,6 +246,13 @@ span {
     top: 10px;
     right: 10px;
     padding: 10px;
+  }
+
+  .brush-controls {
+    bottom: 10px;
+    left: 10px;
+    padding: 10px;
+    gap: 10px;
   }
 
   .controls {
