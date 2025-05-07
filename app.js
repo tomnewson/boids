@@ -96,7 +96,25 @@ window.onload = () => {
     // Toggle audio on/off
     function toggleAudio() {
       const audioEnabled = simulation.toggleAudio();
-      if (audioEnabled) {
+
+      // Update UI immediately for better user experience
+      updateAudioButtonUI(audioEnabled);
+
+      // Check actual state after a brief delay to ensure accuracy
+      setTimeout(() => {
+        const actualState = simulation.audioEngine.isRunning();
+        if (actualState !== audioEnabled) {
+          console.log(
+            "Correcting audio button state to match actual audio state"
+          );
+          updateAudioButtonUI(actualState);
+        }
+      }, 500);
+    }
+
+    // Helper function to update audio button UI
+    function updateAudioButtonUI(enabled) {
+      if (enabled) {
         audioBtn.textContent = "🔊";
         audioBtn.title = "Sound On";
         audioBtn.classList.remove("audio-off");

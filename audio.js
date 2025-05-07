@@ -19,6 +19,60 @@ class AudioEngine {
 
     this.lastNoteTriggers = {};
     this.noteThrottle = 200; // Minimum ms between notes from the same source
+
+    // Add visibility change listener to handle tab switching
+    document.addEventListener(
+      "visibilitychange",
+      this._handleVisibilityChange.bind(this)
+    );
+  }
+
+  // Handle visibility changes (tab switching)
+  _handleVisibilityChange() {
+    // When coming back to the tab, check if audio context needs recovery
+    if (document.visibilityState === "visible" && this._initialized) {
+      this._checkAndRecoverAudioContext();
+    }
+  }
+
+  // Check and recover audio context if it's in a suspended or interrupted state
+  _checkAndRecoverAudioContext() {
+    if (this._audioContext && this._audioContext.state !== "running") {
+      console.log(
+        "AudioContext needs recovery. Current state:",
+        this._audioContext.state
+      );
+      // The context exists but is suspended - we need to recreate it
+      this._recreateAudioContext();
+    }
+  }
+
+  // Recreate the audio context if it's in an unrecoverable state
+  _recreateAudioContext() {
+    try {
+      // Clean up old context if possible
+      if (this._audioContext) {
+        try {
+          this._masterGain.disconnect();
+        } catch (e) {
+          console.warn("Could not disconnect old master gain:", e);
+        }
+      }
+
+      // Create new context and gain node
+      this._audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+      this._masterGain = this._audioContext.createGain();
+      this._masterGain.gain.value = 0.3; // Set overall volume
+      this._masterGain.connect(this._audioContext.destination);
+      console.log(
+        "AudioContext recreated successfully. New state:",
+        this._audioContext.state
+      );
+    } catch (e) {
+      console.error("Failed to recreate AudioContext:", e);
+      this._initialized = false; // Mark as uninitialized so next toggle will try again
+    }
   }
 
   // Lazy initialize the AudioContext on first user interaction
@@ -42,6 +96,10 @@ class AudioEngine {
       console.warn("AudioContext accessed before initialization");
       return null;
     }
+
+    // Check if context needs recovery
+    this._checkAndRecoverAudioContext();
+
     return this._audioContext;
   }
 
@@ -200,12 +258,25 @@ class AudioEngine {
   start() {
     if (!this._initialized) {
       this.initialize();
+    } else {
+      // Check if context needs recovery
+      this._checkAndRecoverAudioContext();
     }
 
+    // Handle the case where context is suspended
     if (this._audioContext && this._audioContext.state === "suspended") {
-      this._audioContext.resume();
+      this._audioContext.resume().catch((e) => {
+        console.error("Failed to resume AudioContext:", e);
+        // If resume fails, try recreating
+        this._recreateAudioContext();
+      });
     }
-    return this._initialized;
+
+    return (
+      this._initialized &&
+      this._audioContext &&
+      this._audioContext.state === "running"
+    );
   }
 
   // Suspend audio
@@ -218,18 +289,112 @@ class AudioEngine {
 
   // Toggle audio state
   toggle() {
+    console.log(
+      "Audio toggle clicked. Current state:",
+      this._initialized ? this._audioContext?.state : "not initialized"
+    );
+
+    // If not initialized, initialize and explicitly start it
     if (!this._initialized) {
-      return this.start();
+      this.initialize();
+
+      // After initialization, immediately resume the context
+      // This is crucial for browsers that create AudioContext in suspended state
+      if (this._audioContext && this._audioContext.state !== "running") {
+        try {
+          // Use .then to ensure we update the UI correctly after starting
+          this._audioContext
+            .resume()
+            .then(() => {
+              console.log(
+                "AudioContext successfully started after initialization"
+              );
+            })
+            .catch((e) => {
+              console.error(
+                "Failed to start AudioContext after initialization:",
+                e
+              );
+              this._recreateAudioContext();
+            });
+        } catch (e) {
+          console.error("Error trying to resume after initialization:", e);
+          this._recreateAudioContext();
+        }
+      }
+
+      // Always return true to update the UI immediately
+      return true;
     }
-    return this._audioContext.state === "running" ? this.stop() : this.start();
+
+    // First check if the context is in a valid state
+    if (this._audioContext && this._audioContext.state === "closed") {
+      // If context is closed (happens sometimes after tab switching), recreate it
+      console.log("AudioContext was closed, recreating...");
+      this._recreateAudioContext();
+
+      // Then explicitly start it
+      if (this._audioContext) {
+        this._audioContext.resume().catch((e) => {
+          console.error("Failed to start recreated AudioContext:", e);
+        });
+      }
+
+      return true;
+    }
+
+    // Try the normal toggle flow with better promise handling
+    try {
+      if (this._audioContext?.state === "running") {
+        return this.stop();
+      } else if (this._audioContext) {
+        // If suspended, try to resume it with better promise handling
+        this._audioContext
+          .resume()
+          .then(() => {
+            console.log("AudioContext successfully resumed");
+          })
+          .catch((e) => {
+            console.error("Failed to resume AudioContext:", e);
+            // If resume fails, try recreating the context
+            this._recreateAudioContext();
+          });
+
+        // Always return true to update the UI immediately
+        return true;
+      }
+    } catch (e) {
+      // If any errors occur, recreate the context
+      console.error("Error in audio toggle:", e);
+      this._recreateAudioContext();
+
+      // Always return true to update the UI
+      return true;
+    }
+
+    // Fallback
+    return false;
   }
 
   // Check if audio is currently running
   isRunning() {
-    return (
+    // First do the basic checks
+    const basicCheck =
       this._initialized &&
       this._audioContext &&
-      this._audioContext.state === "running"
-    );
+      this._audioContext.state === "running";
+
+    // If basic check passes, do a deeper check to ensure we're actually able to produce sound
+    if (basicCheck) {
+      return true;
+    }
+
+    // If audio context exists but isn't running, return false
+    if (this._audioContext && this._audioContext.state !== "running") {
+      return false;
+    }
+
+    // Default to false for any other state
+    return false;
   }
 }
