@@ -480,11 +480,22 @@ class Boid {
     // Draw the boid as a triangle with dynamic size
     ctx.beginPath();
     ctx.fillStyle = dynamicColor;
+
+    // Create path for the triangle
     ctx.moveTo(this.size * 2 * sizeMultiplier, 0); // Nose
     ctx.lineTo(-this.size * sizeMultiplier, this.size * sizeMultiplier); // Left tail
     ctx.lineTo(-this.size * sizeMultiplier, -this.size * sizeMultiplier); // Right tail
     ctx.closePath();
+
+    // Fill the triangle
     ctx.fill();
+
+    // Add a very subtle stroke with same color but slightly transparent
+    // This helps with anti-aliasing the edges
+    ctx.strokeStyle = dynamicColor;
+    ctx.lineWidth = 0.5;
+    ctx.lineJoin = "round";
+    ctx.stroke();
 
     // Restore the context state
     ctx.restore();

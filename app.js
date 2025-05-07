@@ -6,6 +6,11 @@ window.onload = () => {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
+  // Enable anti-aliasing through image smoothing
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "medium"; // Balance between quality and performance
+
   console.log("Canvas element:", canvas);
   console.log("Canvas dimensions:", canvas.width, "x", canvas.height);
 

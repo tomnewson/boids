@@ -2,6 +2,16 @@ class Simulation {
   constructor(canvasId, config = {}) {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext("2d");
+
+    // Enable anti-aliasing for boids but not for walls
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "medium";
+
+    // Create a separate offscreen canvas for walls with pixel-perfect rendering
+    this.wallCanvas = document.createElement("canvas");
+    this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
+    this.wallNeedsUpdate = true; // Flag to redraw walls only when needed
+
     this.boids = [];
     this.running = true;
     this.separationFactor = 1.5;
@@ -28,12 +38,12 @@ class Simulation {
     this.walls = []; // Array to store wall points
     this.drawingWalls = true; // Always enabled since it's the only mode
     this.currentWall = null; // Current wall being drawn
-    this.wallBrushSize = 8; // Wall brush size in pixels
+    this.wallBrushSize = 4; // Wall brush size in pixels (halved from 8px to 4px)
     this.wallColor = "#ffffff"; // Wall color (white)
     this.lastDrawPoint = null; // Last point where brush was drawn
     this.minDrawDistance = 2; // Significantly reduced for continuous walls
     this.eraserMode = false; // Track if we're in eraser mode
-    this.eraserSize = 16; // Size of eraser (slightly larger than draw brush)
+    this.eraserSize = this.wallBrushSize * 3; // Size of eraser relative to brush size
 
     // Set cursor to crosshair by default since drawing is always enabled
     this.canvas.style.cursor = "crosshair";
@@ -85,6 +95,11 @@ class Simulation {
     // Use full window dimensions
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
+
+    // Resize wall canvas to match main canvas
+    this.wallCanvas.width = this.canvas.width;
+    this.wallCanvas.height = this.canvas.height;
+    this.wallNeedsUpdate = true; // Mark walls for redraw
   }
 
   // Handle window resize events
@@ -92,6 +107,11 @@ class Simulation {
     // Update canvas dimensions
     this.canvas.width = width;
     this.canvas.height = height;
+
+    // Resize wall canvas to match main canvas
+    this.wallCanvas.width = width;
+    this.wallCanvas.height = height;
+    this.wallNeedsUpdate = true; // Mark walls for redraw
 
     // Keep boids within the new canvas bounds
     for (const boid of this.boids) {
@@ -217,6 +237,7 @@ class Simulation {
 
       this.currentWall = null;
       this.lastDrawPoint = null;
+      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
 
     // Also handle mouse leaving canvas
@@ -229,6 +250,7 @@ class Simulation {
 
       this.currentWall = null;
       this.lastDrawPoint = null;
+      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
 
     // TOUCH EVENTS for mobile support
@@ -320,6 +342,7 @@ class Simulation {
 
       this.currentWall = null;
       this.lastDrawPoint = null;
+      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
 
     this.canvas.addEventListener("touchcancel", (e) => {
@@ -334,19 +357,41 @@ class Simulation {
 
       this.currentWall = null;
       this.lastDrawPoint = null;
+      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
   }
 
   // Add a point to the current wall
   addWallPoint(x, y) {
-    // Use consistent size for pixel-like effect
+    // Use circular brush pattern made up of small square tiles
     const pointSize = this.wallBrushSize;
+    const brushRadius = this.wallBrushSize * 1.5; // Circle radius slightly larger than tile size
 
-    this.currentWall.push({
-      x,
-      y,
-      size: pointSize,
-    });
+    // Create a circular pattern of points around the cursor position
+    for (
+      let offsetX = -brushRadius;
+      offsetX <= brushRadius;
+      offsetX += pointSize
+    ) {
+      for (
+        let offsetY = -brushRadius;
+        offsetY <= brushRadius;
+        offsetY += pointSize
+      ) {
+        // Check if this offset point is within our circular brush
+        const distSq = offsetX * offsetX + offsetY * offsetY;
+        if (distSq <= brushRadius * brushRadius) {
+          this.currentWall.push({
+            x: x + offsetX,
+            y: y + offsetY,
+            size: pointSize,
+          });
+        }
+      }
+    }
+
+    // Update wall canvas immediately as points are added
+    this.wallNeedsUpdate = true;
   }
 
   // Toggle wall drawing mode
@@ -399,12 +444,14 @@ class Simulation {
     // Remove any empty wall collections
     if (modified) {
       this.walls = this.walls.filter((wall) => wall.length > 0);
+      this.wallNeedsUpdate = true; // Mark walls for redraw
     }
   }
 
   // Clear all walls
   clearWalls() {
     this.walls = [];
+    this.wallNeedsUpdate = true; // Mark walls for redraw
   }
 
   // Check if a point is close to a wall (for boid collision detection)
@@ -429,6 +476,23 @@ class Simulation {
         }
       }
     }
+
+    // Also check the current wall being drawn
+    if (this.currentWall && this.currentWall.length > 0) {
+      for (let p = 0; p < this.currentWall.length; p++) {
+        const point = this.currentWall[p];
+
+        // Distance check for current wall points
+        const dx = x - point.x;
+        const dy = y - point.y;
+        const distanceSquared = dx * dx + dy * dy;
+
+        if (distanceSquared < Math.pow(point.size / 2 + radius * 0.6, 2)) {
+          return true;
+        }
+      }
+    }
+
     return false;
   }
 
@@ -442,6 +506,29 @@ class Simulation {
       // Check each brush point in the wall
       for (const point of wall) {
         // Calculate distance from boid to brush point
+        const dx = x - point.x;
+        const dy = y - point.y;
+        const distanceSquared = dx * dx + dy * dy;
+
+        // If this is the closest wall point so far
+        if (distanceSquared < closestDistance) {
+          closestDistance = distanceSquared;
+
+          // Normalize the vector away from the wall point
+          const distance = Math.sqrt(distanceSquared);
+          if (distance > 0) {
+            // Normal points away from the wall point
+            normal.x = dx / distance;
+            normal.y = dy / distance;
+          }
+        }
+      }
+    }
+
+    // Also check the current wall being drawn
+    if (this.currentWall && this.currentWall.length > 0) {
+      for (const point of this.currentWall) {
+        // Calculate distance from boid to current wall point
         const dx = x - point.x;
         const dy = y - point.y;
         const distanceSquared = dx * dx + dy * dy;
@@ -566,7 +653,11 @@ class Simulation {
       }
 
       // Check for wall collisions and provide wall avoidance vectors
-      if (this.walls.length > 0) {
+      // Also check for currentWall to handle the first wall being drawn
+      if (
+        this.walls.length > 0 ||
+        (this.currentWall && this.currentWall.length > 0)
+      ) {
         boid.avoidWalls(this);
       }
 
@@ -598,19 +689,31 @@ class Simulation {
     this.ctx.fillStyle = "#111";
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Draw walls (collections of brush points)
-    this.ctx.fillStyle = this.wallColor;
+    // Redraw walls only if needed
+    if (this.wallNeedsUpdate) {
+      this.wallCtx.clearRect(
+        0,
+        0,
+        this.wallCanvas.width,
+        this.wallCanvas.height
+      );
+      this.wallCtx.fillStyle = this.wallColor;
 
-    // Use different drawing approaches for better performance and visual effect
-    // Draw each wall as a collection of squares for a pixel-like effect
-    for (const wall of this.walls) {
-      this.drawWallSegment(wall);
+      // Draw walls (collections of brush points)
+      for (const wall of this.walls) {
+        this.drawWallSegment(this.wallCtx, wall);
+      }
+
+      // Draw current wall being drawn
+      if (this.drawingWalls && this.currentWall) {
+        this.drawWallSegment(this.wallCtx, this.currentWall);
+      }
+
+      this.wallNeedsUpdate = false; // Reset update flag
     }
 
-    // Draw current wall being drawn
-    if (this.drawingWalls && this.currentWall) {
-      this.drawWallSegment(this.currentWall);
-    }
+    // Draw walls from offscreen canvas
+    this.ctx.drawImage(this.wallCanvas, 0, 0);
 
     // Draw each boid, passing the full boids array for neighbor awareness
     for (const boid of this.boids) {
@@ -618,17 +721,47 @@ class Simulation {
     }
   }
 
-  // Helper method to draw a wall segment with pixel-like appearance
-  drawWallSegment(wallPoints) {
+  // Helper method to draw a wall segment with pixel-perfect appearance
+  drawWallSegment(ctx, wallPoints) {
+    // Disable image smoothing for wall canvas to get crisp edges
+    ctx.imageSmoothingEnabled = false;
+
+    // Group nearby points into clusters for more efficient rendering
+    const wallMap = new Map();
+    const gridSize = Math.floor(this.wallBrushSize);
+
+    // Create a grid-based map of wall points
     for (const point of wallPoints) {
-      // Draw as a square for pixel-like effect
-      const halfSize = point.size / 2;
-      this.ctx.fillRect(
-        point.x - halfSize,
-        point.y - halfSize,
-        point.size,
-        point.size
-      );
+      // Snap to grid for crisp rendering
+      const gridX = Math.floor(point.x / gridSize) * gridSize;
+      const gridY = Math.floor(point.y / gridSize) * gridSize;
+      const key = `${gridX},${gridY}`;
+
+      if (!wallMap.has(key)) {
+        wallMap.set(key, { x: gridX, y: gridY });
+      }
+    }
+
+    // Draw crisp wall points
+    for (const [_, point] of wallMap.entries()) {
+      // Draw as sharp-edged square
+      ctx.fillRect(point.x, point.y, gridSize, gridSize);
+    }
+
+    // If we're drawing the active wall segment, add a subtle glow effect
+    if (wallPoints === this.currentWall && wallPoints.length > 0) {
+      // Enable smoothing just for the glow effect
+      ctx.imageSmoothingEnabled = true;
+
+      // Add subtle highlight to show where user is drawing
+      const lastPoint = wallPoints[wallPoints.length - 1];
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+      ctx.beginPath();
+      ctx.arc(lastPoint.x, lastPoint.y, gridSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Reset to wall color
+      ctx.fillStyle = this.wallColor;
     }
   }
 
