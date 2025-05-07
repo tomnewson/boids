@@ -38,14 +38,15 @@ class Boid {
   }
 
   // Update boid's position based on its velocity and acceleration
-  update() {
+  update(timeScale = 1.0) {
     // Store previous velocity for smoothing
     this.prevVelocity.x = this.velocity.x;
     this.prevVelocity.y = this.velocity.y;
 
     // Update velocity based on acceleration with damping
-    this.velocity.x += this.acceleration.x;
-    this.velocity.y += this.acceleration.y;
+    // Apply time scaling to ensure consistent movement speed regardless of frame rate
+    this.velocity.x += this.acceleration.x * timeScale;
+    this.velocity.y += this.acceleration.y * timeScale;
 
     // Apply velocity smoothing by blending with previous velocity
     const smoothingFactor = 0.3; // 0 = no smoothing, 1 = maximum smoothing
@@ -71,9 +72,9 @@ class Boid {
       this.velocity.y = (this.velocity.y / speed) * this.minSpeed;
     }
 
-    // Update position based on velocity
-    this.position.x += this.velocity.x;
-    this.position.y += this.velocity.y;
+    // Update position based on velocity with time scaling
+    this.position.x += this.velocity.x * timeScale;
+    this.position.y += this.velocity.y * timeScale;
 
     // Reset acceleration
     this.acceleration.x = 0;
@@ -397,17 +398,18 @@ class Boid {
       const ny = -dy / distToCursor;
 
       // Stronger force when closer to cursor (inverse square law)
-      const forceMagnitude = 5.0 * (simulation.cursorRadius / Math.max(10, distToCursor));
+      const forceMagnitude =
+        5.0 * (simulation.cursorRadius / Math.max(10, distToCursor));
 
       // Apply avoidance force with high priority
       const force = {
         x: nx * forceMagnitude * simulation.cursorAvoidStrength,
-        y: ny * forceMagnitude * simulation.cursorAvoidStrength
+        y: ny * forceMagnitude * simulation.cursorAvoidStrength,
       };
 
       this.applyForce({
         x: force.x,
-        y: force.y
+        y: force.y,
       });
     }
   }

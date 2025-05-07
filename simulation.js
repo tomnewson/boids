@@ -1,5 +1,5 @@
 class Simulation {
-  constructor(canvasId) {
+  constructor(canvasId, config = {}) {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext("2d");
     this.boids = [];
@@ -7,6 +7,17 @@ class Simulation {
     this.separationFactor = 1.5;
     this.alignmentFactor = 1.0;
     this.cohesionFactor = 1.0;
+
+    // Apply device-specific configuration
+    this.config = {
+      useHighPerformanceMode:
+        config.useHighPerformanceMode !== undefined
+          ? config.useHighPerformanceMode
+          : true,
+      // Always use default boid count (100) regardless of device
+      boidCount: 100,
+      targetFPS: config.targetFPS || 60,
+    };
 
     // Add cursor tracking with more subtle parameters
     this.cursorPosition = { x: -100, y: -100 }; // Start off-screen
@@ -35,11 +46,17 @@ class Simulation {
 
     // Note: AudioContext will be initialized only when audio toggle button is clicked
 
+    // Add time tracking variables for frame-rate independence
+    this.lastTime = 0;
+    this.targetFPS = this.config.targetFPS;
+    this.timeStep = 1000 / this.targetFPS; // ms per update
+    this.accumulatedTime = 0;
+
     // Set canvas dimensions
     this.resizeCanvas();
 
     // Create initial boids
-    this.initBoids(100);
+    this.initBoids(this.config.boidCount);
 
     // Set up wall drawing event listeners
     this.setupWallDrawing();
@@ -49,6 +66,9 @@ class Simulation {
 
     // Prevent text selection on canvas to improve mobile experience
     this.preventTextSelection();
+
+    // Apply special handling for Safari/iOS devices
+    this.applySafariOptimizations();
 
     // Start animation loop
     this.animate();
@@ -92,7 +112,7 @@ class Simulation {
 
   // Reset the simulation
   reset() {
-    this.initBoids(100);
+    this.initBoids(this.config.boidCount);
   }
 
   // Update parameters
@@ -514,8 +534,31 @@ class Simulation {
     return { x: Math.random() - 0.5, y: Math.random() - 0.5 };
   }
 
+  // Apply optimizations specifically for Safari/iOS
+  applySafariOptimizations() {
+    // Check if we're on iOS Safari
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    if (isIOS && isSafari) {
+      // iOS Safari specific optimizations
+      console.log("Applying Safari/iOS optimizations");
+
+      // Force high performance rendering mode
+      this.canvas.style.transform = "translateZ(0)";
+      this.canvas.style.backfaceVisibility = "hidden";
+
+      // Fix the time step for more consistent updates
+      this.timeStep = 16.666; // Lock to 60fps equivalent
+    }
+  }
+
   // Update all boids
-  update() {
+  update(deltaTime) {
+    // Scale factor helps maintain consistent speed across different devices/framerates
+    const timeScale = deltaTime / this.timeStep;
+
     for (const boid of this.boids) {
       // Always apply cursor avoidance first if the method exists
       if (typeof boid.avoidCursor === "function") {
@@ -533,7 +576,7 @@ class Simulation {
         this.alignmentFactor,
         this.cohesionFactor
       );
-      boid.update();
+      boid.update(timeScale); // Pass time scaling factor to boid update
     }
 
     // Process audio if enabled
@@ -589,13 +632,34 @@ class Simulation {
     }
   }
 
-  // Main animation loop
-  animate() {
+  // Main animation loop with time-based updates
+  animate(currentTime = 0) {
+    // Calculate time elapsed since last frame
+    const deltaTime = currentTime - this.lastTime;
+    this.lastTime = currentTime;
+
+    // Accumulate time since last update
+    this.accumulatedTime += deltaTime;
+
+    // Use a maximum frame time to prevent spiral of death on slow devices
+    const maxFrameTime = 200; // Cap at 5 FPS equivalent
+    if (this.accumulatedTime > maxFrameTime) {
+      this.accumulatedTime = maxFrameTime;
+    }
+
+    // Update simulation at a fixed time step for consistency
     if (this.running) {
-      this.update();
+      // Process all accumulated time in fixed time steps
+      while (this.accumulatedTime >= this.timeStep) {
+        this.update(this.timeStep);
+        this.accumulatedTime -= this.timeStep;
+      }
+
+      // Draw the current state
       this.draw();
     }
-    requestAnimationFrame(() => this.animate());
+
+    requestAnimationFrame((time) => this.animate(time));
   }
 
   // Toggle pause/resume

@@ -9,6 +9,44 @@ window.onload = () => {
   console.log("Canvas element:", canvas);
   console.log("Canvas dimensions:", canvas.width, "x", canvas.height);
 
+  // Configure simulation for optimal performance across devices
+  const configureForDevice = () => {
+    // Check for iOS device
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isMobile =
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
+
+    // Create configuration object
+    const config = {
+      useHighPerformanceMode: true,
+      boidCount: 100,
+      targetFPS: 60,
+    };
+
+    // Check for low-end devices or potential low-power mode
+    if (
+      (isMobile && navigator.deviceMemory && navigator.deviceMemory < 4) ||
+      (isIOS && isSafari)
+    ) {
+      // These settings help ensure consistent speed even in low power mode
+      config.useHighPerformanceMode = false;
+      // Never reduce the number of boids
+
+      console.log(
+        "Detected potential low-power mode device, optimizing performance"
+      );
+    }
+
+    return config;
+  };
+
+  // Get configuration based on device
+  const deviceConfig = configureForDevice();
+
   // Handle window resize
   window.addEventListener("resize", () => {
     canvas.width = window.innerWidth;
@@ -20,8 +58,8 @@ window.onload = () => {
   });
 
   try {
-    // Initialize simulation
-    const simulation = new Simulation("boids-canvas");
+    // Initialize simulation with device-specific configuration
+    const simulation = new Simulation("boids-canvas", deviceConfig);
     // Store in window object so resize handler can access it
     window.simulation = simulation;
 
