@@ -47,6 +47,9 @@ class Simulation {
     // Add cursor tracking listener
     this.setupCursorTracking();
 
+    // Prevent text selection on canvas to improve mobile experience
+    this.preventTextSelection();
+
     // Start animation loop
     this.animate();
 
@@ -114,8 +117,24 @@ class Simulation {
     return { x, y };
   }
 
+  // Get accurate canvas coordinates from touch event
+  getTouchCoordinates(touch) {
+    const rect = this.canvas.getBoundingClientRect();
+
+    // Calculate the scaling ratio of the canvas
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+
+    // Apply scaling to the touch coordinates
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    return { x, y };
+  }
+
   // Setup wall drawing event listeners
   setupWallDrawing() {
+    // MOUSE EVENTS
     this.canvas.addEventListener("mousedown", (e) => {
       if (!this.drawingWalls) return;
 
@@ -182,6 +201,86 @@ class Simulation {
 
     // Also handle mouse leaving canvas
     this.canvas.addEventListener("mouseleave", () => {
+      if (!this.drawingWalls || !this.currentWall) return;
+
+      if (this.currentWall.length > 1) {
+        this.walls.push(this.currentWall);
+      }
+
+      this.currentWall = null;
+      this.lastDrawPoint = null;
+    });
+
+    // TOUCH EVENTS for mobile support
+    this.canvas.addEventListener("touchstart", (e) => {
+      // Prevent default to stop scrolling/zooming
+      e.preventDefault();
+
+      if (!this.drawingWalls) return;
+
+      const touch = e.touches[0]; // Get first touch point
+      const coords = this.getTouchCoordinates(touch);
+
+      if (this.eraserMode) {
+        this.eraseWallsAt(coords.x, coords.y);
+      } else {
+        this.currentWall = [];
+        this.lastDrawPoint = coords;
+        this.addWallPoint(coords.x, coords.y);
+      }
+    });
+
+    this.canvas.addEventListener("touchmove", (e) => {
+      // Prevent default to stop scrolling/zooming
+      e.preventDefault();
+
+      if (!this.drawingWalls || !this.currentWall) return;
+
+      const touch = e.touches[0]; // Get first touch point
+      const coords = this.getTouchCoordinates(touch);
+
+      if (this.eraserMode) {
+        this.eraseWallsAt(coords.x, coords.y);
+      } else {
+        // Calculate distance from last point
+        const dx = coords.x - this.lastDrawPoint.x;
+        const dy = coords.y - this.lastDrawPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Add points continuously for a solid wall
+        if (distance >= this.minDrawDistance) {
+          // For a continuous wall, always add intermediate points
+          const steps = Math.max(Math.ceil(distance / this.minDrawDistance), 1);
+
+          for (let i = 1; i <= steps; i++) {
+            const ratio = i / steps;
+            const interpX = this.lastDrawPoint.x + dx * ratio;
+            const interpY = this.lastDrawPoint.y + dy * ratio;
+            this.addWallPoint(interpX, interpY);
+          }
+
+          this.lastDrawPoint = coords;
+        }
+      }
+    });
+
+    this.canvas.addEventListener("touchend", (e) => {
+      e.preventDefault();
+
+      if (!this.drawingWalls || !this.currentWall) return;
+
+      // Finalize the wall - only keep if it has some points
+      if (this.currentWall.length > 1) {
+        this.walls.push(this.currentWall);
+      }
+
+      this.currentWall = null;
+      this.lastDrawPoint = null;
+    });
+
+    this.canvas.addEventListener("touchcancel", (e) => {
+      e.preventDefault();
+
       if (!this.drawingWalls || !this.currentWall) return;
 
       if (this.currentWall.length > 1) {
@@ -339,6 +438,18 @@ class Simulation {
       const coords = this.getCanvasCoordinates(e);
       this.cursorPosition.x = coords.x;
       this.cursorPosition.y = coords.y;
+    });
+  }
+
+  // Prevent text selection on canvas
+  preventTextSelection() {
+    this.canvas.style.webkitUserSelect = "none"; // Safari
+    this.canvas.style.userSelect = "none"; // Standard
+    this.canvas.style.touchAction = "none"; // Disable browser handling of all touch events
+
+    // Prevent context menu on right click or long press
+    this.canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
     });
   }
 
