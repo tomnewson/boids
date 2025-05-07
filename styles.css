@@ -6,86 +6,185 @@
 
 body {
   font-family: Arial, sans-serif;
-  background-color: #f0f0f0;
-  padding: 20px;
+  overflow: hidden; /* Prevent scrollbars */
+  background-color: #000;
 }
 
-.container {
-  max-width: 1000px;
-  margin: 0 auto;
-  background-color: white;
+/* Make canvas fill entire window */
+#boids-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #111;
+  display: block;
+}
+
+/* Floating control panel */
+.floating-controls {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: rgba(0, 0, 0, 0.7);
   border-radius: 8px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-}
-
-h1 {
-  text-align: center;
-  margin-bottom: 20px;
-  color: #333;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+  padding: 15px;
+  z-index: 100;
+  color: white;
+  backdrop-filter: blur(5px);
+  max-width: 400px;
+  transition: none;
 }
 
 .controls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin-bottom: 20px;
-  justify-content: center;
+  flex-direction: column;
+  gap: 15px;
   padding: 10px;
-  background-color: #f9f9f9;
   border-radius: 5px;
+  transition: none;
+  overflow: hidden;
+  max-height: 500px;
+  position: relative;
+}
+
+/* Position for minimize button */
+#minimize-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 10;
+}
+
+/* Minimized state */
+.minimized {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  left: auto;
+  transform: none;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.minimized .controls {
+  display: none;
+}
+
+.minimized #minimize-btn {
+  position: static;
+  margin: 0;
 }
 
 .control-group {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.slider-row {
+  display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
 }
 
 label {
   font-weight: bold;
-  min-width: 80px;
+  color: #ddd;
 }
 
 input[type="range"] {
-  width: 150px;
+  width: 100%;
 }
 
-button {
-  padding: 8px 16px;
-  background-color: #4caf50;
+span {
+  color: #ddd;
+}
+
+/* Button container for buttons */
+.button-container {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+  width: 100%;
+}
+
+/* Circular icon buttons */
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: transparent;
   color: white;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(3px);
+}
+
+.icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
+}
+
+/* Text buttons */
+.text-btn {
+  background-color: transparent;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 4px;
   cursor: pointer;
-  font-weight: bold;
+  padding: 8px 12px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(3px);
 }
 
-button:hover {
-  background-color: #45a049;
+.text-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.02);
 }
 
-#boids-canvas {
-  width: 100%;
-  height: 500px;
-  background-color: #111;
-  border-radius: 5px;
-  display: block;
-  margin: 0 auto;
-  border: 1px solid #333;
+/* Minimize button specific rules */
+.minimize-btn {
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+}
+
+.minimize-btn:hover {
+  transform: none;
+}
+
+/* Button states */
+.audio-off {
+  border-color: rgba(255, 0, 0, 0.3);
 }
 
 .audio-on {
-  background-color: #3f51b5;
+  border-color: rgba(0, 255, 0, 0.3);
 }
 
-.audio-on:hover {
-  background-color: #303f9f;
-}
-
-#audio-btn {
-  margin-left: 10px;
-  min-width: 110px;
+.active {
+  border-color: rgba(155, 89, 182, 0.8);
+  background-color: rgba(155, 89, 182, 0.2);
 }
 
 .audio-notice {
@@ -113,15 +212,44 @@ button:hover {
   }
 }
 
-.active {
-  background-color: #9b59b6; /* Purple for active states */
-}
+/* Add responsiveness */
+@media (max-width: 770px) {
+  .floating-controls {
+    top: 10px;
+    right: 10px;
+    padding: 10px;
+  }
 
-.active:hover {
-  background-color: #8e44ad;
-}
+  .controls {
+    gap: 10px;
+  }
 
-#wall-toggle-btn,
-#clear-walls-btn {
-  margin-left: 10px;
+  .icon-btn {
+    width: 35px;
+    height: 35px;
+    font-size: 16px;
+  }
+
+  .text-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  /* Maintain circular shape and position for minimized state on small screens */
+  .minimized {
+    width: 35px;
+    height: 35px;
+    min-width: 35px;
+    min-height: 35px;
+    top: 10px;
+    right: 10px;
+  }
+
+  /* Ensure minimize/maximize button stays the same size at smaller screens */
+  .minimize-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
+    min-width: 30px;
+  }
 }

@@ -8,6 +8,11 @@ class Simulation {
     this.alignmentFactor = 1.0;
     this.cohesionFactor = 1.0;
 
+    // Add cursor tracking with more subtle parameters
+    this.cursorPosition = { x: -100, y: -100 }; // Start off-screen
+    this.cursorRadius = 20; // Reduced from 60 to 40
+    this.cursorAvoidStrength = 0.1; // Reduced from 3.5 to 1.8 for less noticeable avoidance
+
     // Wall drawing functionality
     this.walls = []; // Array to store wall points
     this.drawingWalls = true; // Always enabled since it's the only mode
@@ -39,6 +44,9 @@ class Simulation {
     // Set up wall drawing event listeners
     this.setupWallDrawing();
 
+    // Add cursor tracking listener
+    this.setupCursorTracking();
+
     // Start animation loop
     this.animate();
 
@@ -51,8 +59,22 @@ class Simulation {
   // Resize canvas to fill its container
   resizeCanvas() {
     const container = this.canvas.parentElement;
-    this.canvas.width = container.clientWidth;
-    this.canvas.height = 500; // Fixed height
+    // Use full window dimensions
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  }
+
+  // Handle window resize events
+  handleResize(width, height) {
+    // Update canvas dimensions
+    this.canvas.width = width;
+    this.canvas.height = height;
+
+    // Keep boids within the new canvas bounds
+    for (const boid of this.boids) {
+      if (boid.position.x > width) boid.position.x = width - 10;
+      if (boid.position.y > height) boid.position.y = height - 10;
+    }
   }
 
   // Create initial boids
@@ -298,9 +320,72 @@ class Simulation {
     return normal;
   }
 
+  // Track cursor position across the canvas
+  setupCursorTracking() {
+    this.canvas.addEventListener("mousemove", (e) => {
+      const coords = this.getCanvasCoordinates(e);
+      this.cursorPosition.x = coords.x;
+      this.cursorPosition.y = coords.y;
+    });
+
+    // Reset cursor position when mouse leaves canvas
+    this.canvas.addEventListener("mouseleave", () => {
+      this.cursorPosition.x = -100;
+      this.cursorPosition.y = -100;
+    });
+
+    // Also track when mouse enters canvas again
+    this.canvas.addEventListener("mouseenter", (e) => {
+      const coords = this.getCanvasCoordinates(e);
+      this.cursorPosition.x = coords.x;
+      this.cursorPosition.y = coords.y;
+    });
+  }
+
+  // Check if a point is near the cursor with improved detection
+  isPointNearCursor(x, y, radius) {
+    // If cursor is off-screen, nothing is near it
+    if (this.cursorPosition.x < 0 || this.cursorPosition.y < 0) {
+      return false;
+    }
+
+    const dx = x - this.cursorPosition.x;
+    const dy = y - this.cursorPosition.y;
+    const distanceSquared = dx * dx + dy * dy;
+
+    // Calculate the effective radius (sum of cursor radius and check radius)
+    const effectiveRadius = this.cursorRadius + radius;
+
+    return distanceSquared < effectiveRadius * effectiveRadius;
+  }
+
+  // Get normal vector away from cursor
+  getCursorNormal(x, y) {
+    const dx = x - this.cursorPosition.x;
+    const dy = y - this.cursorPosition.y;
+    const distanceSquared = dx * dx + dy * dy;
+    const distance = Math.sqrt(distanceSquared);
+
+    // Return normalized vector pointing away from cursor
+    if (distance > 0) {
+      return {
+        x: dx / distance,
+        y: dy / distance,
+      };
+    }
+
+    // Fallback if exactly at cursor position (unlikely)
+    return { x: Math.random() - 0.5, y: Math.random() - 0.5 };
+  }
+
   // Update all boids
   update() {
     for (const boid of this.boids) {
+      // Always apply cursor avoidance first if the method exists
+      if (typeof boid.avoidCursor === "function") {
+        boid.avoidCursor(this);
+      }
+
       // Check for wall collisions and provide wall avoidance vectors
       if (this.walls.length > 0) {
         boid.avoidWalls(this);
@@ -386,7 +471,9 @@ class Simulation {
   toggleAudio() {
     // Initialize audio engine on first toggle if not already initialized
     if (!this.audioEngine._initialized && !this.audioEnabled) {
-      this.audioEngine.initialize();
+      setTimeout(() => {
+        this.audioEngine.initialize();
+      }, 100);
     }
 
     this.audioEnabled = this.audioEngine.toggle();

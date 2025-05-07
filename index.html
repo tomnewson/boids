@@ -6,57 +6,85 @@
     <title>Reynolds's Boids Simulation</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
+    <!-- Preload scripts to improve performance while ensuring CSS loads first -->
+    <link rel="preload" href="boid.js" as="script" />
+    <link rel="preload" href="audio.js" as="script" />
+    <link rel="preload" href="simulation.js" as="script" />
+    <link rel="preload" href="app.js" as="script" />
   </head>
   <body>
-    <div class="container">
-      <h1>Reynolds's Boids Simulation</h1>
+    <canvas id="boids-canvas"></canvas>
+    <div class="floating-controls">
       <div class="controls">
         <div class="control-group">
           <label for="separation">Separation:</label>
-          <input
-            type="range"
-            id="separation"
-            min="0"
-            max="5"
-            step="0.1"
-            value="1.5"
-          />
-          <span id="separation-value">1.5</span>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="separation"
+              min="0"
+              max="5"
+              step="0.1"
+              value="1.5"
+            />
+            <span id="separation-value">1.5</span>
+          </div>
         </div>
         <div class="control-group">
           <label for="alignment">Alignment:</label>
-          <input
-            type="range"
-            id="alignment"
-            min="0"
-            max="5"
-            step="0.1"
-            value="1.0"
-          />
-          <span id="alignment-value">1.0</span>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="alignment"
+              min="0"
+              max="5"
+              step="0.1"
+              value="1.0"
+            />
+            <span id="alignment-value">1.0</span>
+          </div>
         </div>
         <div class="control-group">
           <label for="cohesion">Cohesion:</label>
-          <input
-            type="range"
-            id="cohesion"
-            min="0"
-            max="5"
-            step="0.1"
-            value="1.0"
-          />
-          <span id="cohesion-value">1.0</span>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="cohesion"
+              min="0"
+              max="5"
+              step="0.1"
+              value="1.0"
+            />
+            <span id="cohesion-value">1.0</span>
+          </div>
         </div>
-        <button id="reset-btn">Reset</button>
-        <button id="audio-btn" class="audio-off">🔇 Sound Off</button>
-        <button id="eraser-btn">🧽 Eraser</button>
-        <button id="clear-walls-btn">🧹 Clear Walls</button>
+        <div class="button-container">
+          <button id="reset-btn" class="text-btn" title="Reset">Reset</button>
+          <button
+            id="audio-btn"
+            class="icon-btn audio-off"
+            title="Toggle Sound"
+          >
+            🔇
+          </button>
+          <button
+            id="eraser-btn"
+            class="icon-btn"
+            title="Switch to Eraser Mode"
+          >
+            🧽
+          </button>
+          <button id="clear-walls-btn" class="text-btn" title="Clear Walls">
+            Clear Walls
+          </button>
+        </div>
       </div>
-      <canvas id="boids-canvas"></canvas>
+      <button id="minimize-btn" class="icon-btn minimize-btn">−</button>
     </div>
-    <script src="boid.js"></script>
-    <script src="audio.js"></script>
-    <script src="simulation.js"></script>
-    <script src="app.js"></script>
+    <!-- Use defer to ensure CSS is loaded before scripts run -->
+    <script src="boid.js" defer></script>
+    <script src="audio.js" defer></script>
+    <script src="simulation.js" defer></script>
+    <script src="app.js" defer></script>
   </body>
 </html>

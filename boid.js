@@ -373,6 +373,45 @@ class Boid {
     }
   }
 
+  // Cursor avoidance method
+  avoidCursor(simulation) {
+    // First check if cursor is even on the canvas
+    if (simulation.cursorPosition.x < 0 || simulation.cursorPosition.y < 0) {
+      return;
+    }
+
+    // Directly calculate distance to cursor
+    const dx = simulation.cursorPosition.x - this.position.x;
+    const dy = simulation.cursorPosition.y - this.position.y;
+    const distToCursor = Math.sqrt(dx * dx + dy * dy);
+
+    // Return early if cursor is very far away (optimization)
+    if (distToCursor > 200) {
+      return;
+    }
+
+    // If within the detection radius, apply avoidance force
+    if (distToCursor < simulation.cursorRadius * 1.5) {
+      // Calculate normalized vector pointing away from cursor
+      const nx = -dx / distToCursor;
+      const ny = -dy / distToCursor;
+
+      // Stronger force when closer to cursor (inverse square law)
+      const forceMagnitude = 5.0 * (simulation.cursorRadius / Math.max(10, distToCursor));
+
+      // Apply avoidance force with high priority
+      const force = {
+        x: nx * forceMagnitude * simulation.cursorAvoidStrength,
+        y: ny * forceMagnitude * simulation.cursorAvoidStrength
+      };
+
+      this.applyForce({
+        x: force.x,
+        y: force.y
+      });
+    }
+  }
+
   // Calculate color based on boid properties
   getColor() {
     // Calculate current speed
@@ -430,7 +469,7 @@ class Boid {
     ctx.rotate(angle);
 
     // Get dynamic color based on boid properties
-    const dynamicColor = this.getColor();
+    let dynamicColor = this.getColor();
 
     // Get neighbor count for size adjustment
     const neighborCount = this.countNeighbors(boids);

@@ -2,17 +2,28 @@ window.onload = () => {
   // Debug info
   const canvas = document.getElementById("boids-canvas");
 
-  // Explicitly set canvas dimensions
-  const container = canvas.parentElement;
-  canvas.width = container.clientWidth;
-  canvas.height = 500;
+  // Set canvas to fill the entire window
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 
   console.log("Canvas element:", canvas);
   console.log("Canvas dimensions:", canvas.width, "x", canvas.height);
 
+  // Handle window resize
+  window.addEventListener("resize", () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    // If simulation exists in global scope, tell it about the resize
+    if (window.simulation) {
+      window.simulation.handleResize(canvas.width, canvas.height);
+    }
+  });
+
   try {
     // Initialize simulation
     const simulation = new Simulation("boids-canvas");
+    // Store in window object so resize handler can access it
+    window.simulation = simulation;
 
     // UI elements
     const separationSlider = document.getElementById("separation");
@@ -25,11 +36,11 @@ window.onload = () => {
     const audioBtn = document.getElementById("audio-btn");
     const eraserBtn = document.getElementById("eraser-btn");
     const clearWallsBtn = document.getElementById("clear-walls-btn");
+    const minimizeBtn = document.getElementById("minimize-btn");
+    const floatingControls = document.querySelector(".floating-controls");
 
-    // Keep audio button showing "Sound Off" state by default
-    audioBtn.textContent = "🔇 Sound Off";
-    audioBtn.classList.remove("audio-on");
-    audioBtn.classList.add("audio-off");
+    // Initialize minimize state
+    let isMinimized = false;
 
     // Update simulation parameters when sliders change
     function updateParams() {
@@ -48,11 +59,13 @@ window.onload = () => {
     function toggleAudio() {
       const audioEnabled = simulation.toggleAudio();
       if (audioEnabled) {
-        audioBtn.textContent = "🔊 Sound On";
+        audioBtn.textContent = "🔊";
+        audioBtn.title = "Sound On";
         audioBtn.classList.remove("audio-off");
         audioBtn.classList.add("audio-on");
       } else {
-        audioBtn.textContent = "🔇 Sound Off";
+        audioBtn.textContent = "🔇";
+        audioBtn.title = "Sound Off";
         audioBtn.classList.remove("audio-on");
         audioBtn.classList.add("audio-off");
       }
@@ -62,17 +75,34 @@ window.onload = () => {
     function toggleEraser() {
       const eraserActive = simulation.toggleEraserMode();
       if (eraserActive) {
-        eraserBtn.textContent = "✏️ Draw";
-        eraserBtn.classList.add("active");
+        // Now in eraser mode, show drawing icon to indicate clicking will switch to draw mode
+        eraserBtn.textContent = "✏️";
+        eraserBtn.title = "Switch to Drawing Mode";
       } else {
-        eraserBtn.textContent = "🧽 Eraser";
-        eraserBtn.classList.remove("active");
+        // Now in drawing mode, show eraser icon to indicate clicking will switch to eraser mode
+        eraserBtn.textContent = "🧽";
+        eraserBtn.title = "Switch to Eraser Mode";
       }
     }
 
-    // Clear all walls
+    // Clear walls
     function clearWalls() {
       simulation.clearWalls();
+    }
+
+    // Toggle minimize/expand
+    function toggleMinimize() {
+      isMinimized = !isMinimized;
+
+      if (isMinimized) {
+        floatingControls.classList.add("minimized");
+        minimizeBtn.textContent = "+";
+        minimizeBtn.title = "Expand";
+      } else {
+        floatingControls.classList.remove("minimized");
+        minimizeBtn.textContent = "−";
+        minimizeBtn.title = "Minimize";
+      }
     }
 
     // Set up event listeners
@@ -83,23 +113,10 @@ window.onload = () => {
     audioBtn.addEventListener("click", toggleAudio);
     eraserBtn.addEventListener("click", toggleEraser);
     clearWallsBtn.addEventListener("click", clearWalls);
+    minimizeBtn.addEventListener("click", toggleMinimize);
 
     // Initialize parameter display
     updateParams();
-
-    // Display instructions
-    console.log(
-      "Draw on the canvas to create walls for the boids to navigate around."
-    );
-    console.log(
-      "Click 'Eraser' to switch to eraser mode and remove parts of walls."
-    );
-    console.log("Use the sliders to adjust boid behavior parameters.");
-    console.log(
-      "Click 'Sound On/Off' to toggle audio generation from boid movement."
-    );
-    console.log("Press the Reset button to restart with new boids.");
-    console.log("Click 'Clear Walls' to remove all walls.");
   } catch (error) {
     console.error("Error initializing simulation:", error);
   }
