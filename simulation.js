@@ -33,6 +33,7 @@ class Simulation {
     this.cursorPosition = { x: -100, y: -100 }; // Start off-screen
     this.cursorRadius = 20; // Reduced from 60 to 40
     this.cursorAvoidStrength = 0.1; // Reduced from 3.5 to 1.8 for less noticeable avoidance
+    this.touchActive = false; // Track if touch is currently active
 
     // Wall drawing functionality
     this.walls = []; // Array to store wall points
@@ -649,16 +650,21 @@ class Simulation {
 
   // Track cursor position across the canvas
   setupCursorTracking() {
+    // Mouse tracking
     this.canvas.addEventListener("mousemove", (e) => {
       const coords = this.getCanvasCoordinates(e);
       this.cursorPosition.x = coords.x;
       this.cursorPosition.y = coords.y;
+      this.touchActive = false; // Mouse takes precedence over touch
     });
 
     // Reset cursor position when mouse leaves canvas
     this.canvas.addEventListener("mouseleave", () => {
-      this.cursorPosition.x = -100;
-      this.cursorPosition.y = -100;
+      // Only reset if no touch is active
+      if (!this.touchActive) {
+        this.cursorPosition.x = -100;
+        this.cursorPosition.y = -100;
+      }
     });
 
     // Also track when mouse enters canvas again
@@ -666,6 +672,51 @@ class Simulation {
       const coords = this.getCanvasCoordinates(e);
       this.cursorPosition.x = coords.x;
       this.cursorPosition.y = coords.y;
+      this.touchActive = false; // Mouse takes precedence
+    });
+
+    // Touch tracking for mobile devices - make boids dodge touch
+    this.canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const coords = this.getTouchCoordinates(touch);
+      this.cursorPosition.x = coords.x;
+      this.cursorPosition.y = coords.y;
+      this.touchActive = true;
+    });
+
+    this.canvas.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const coords = this.getTouchCoordinates(touch);
+      this.cursorPosition.x = coords.x;
+      this.cursorPosition.y = coords.y;
+      this.touchActive = true;
+    });
+
+    this.canvas.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      // Only reset cursor position if no other touches are active
+      if (e.touches.length === 0) {
+        this.cursorPosition.x = -100;
+        this.cursorPosition.y = -100;
+        this.touchActive = false;
+      } else {
+        // If there are still touches, use the first one
+        const touch = e.touches[0];
+        const coords = this.getTouchCoordinates(touch);
+        this.cursorPosition.x = coords.x;
+        this.cursorPosition.y = coords.y;
+      }
+    });
+
+    this.canvas.addEventListener("touchcancel", (e) => {
+      e.preventDefault();
+      if (e.touches.length === 0) {
+        this.cursorPosition.x = -100;
+        this.cursorPosition.y = -100;
+        this.touchActive = false;
+      }
     });
   }
 
