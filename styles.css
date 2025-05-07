@@ -167,6 +167,11 @@ span {
   width: 30px;
   height: 30px;
   font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 2px; /* Adjust vertical position for Safari */
 }
 
 .minimize-btn:hover {
@@ -251,5 +256,10 @@ span {
     height: 30px;
     font-size: 20px;
     min-width: 30px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 2px; /* Maintain Safari alignment fix */
   }
 }

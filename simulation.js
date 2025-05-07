@@ -223,6 +223,8 @@ class Simulation {
 
       if (this.eraserMode) {
         this.eraseWallsAt(coords.x, coords.y);
+        // Save the last touch position for eraser interpolation
+        this.lastDrawPoint = coords;
       } else {
         this.currentWall = [];
         this.lastDrawPoint = coords;
@@ -234,14 +236,36 @@ class Simulation {
       // Prevent default to stop scrolling/zooming
       e.preventDefault();
 
-      if (!this.drawingWalls || !this.currentWall) return;
+      if (!this.drawingWalls) return;
 
       const touch = e.touches[0]; // Get first touch point
       const coords = this.getTouchCoordinates(touch);
 
       if (this.eraserMode) {
-        this.eraseWallsAt(coords.x, coords.y);
-      } else {
+        // Calculate distance from last point
+        if (!this.lastDrawPoint) {
+          this.lastDrawPoint = coords;
+        }
+
+        const dx = coords.x - this.lastDrawPoint.x;
+        const dy = coords.y - this.lastDrawPoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Add points continuously for erasing with interpolation
+        if (distance >= this.minDrawDistance) {
+          // For continuous erasing, add intermediate points
+          const steps = Math.max(Math.ceil(distance / this.minDrawDistance), 1);
+
+          for (let i = 1; i <= steps; i++) {
+            const ratio = i / steps;
+            const interpX = this.lastDrawPoint.x + dx * ratio;
+            const interpY = this.lastDrawPoint.y + dy * ratio;
+            this.eraseWallsAt(interpX, interpY);
+          }
+
+          this.lastDrawPoint = coords;
+        }
+      } else if (this.currentWall) {
         // Calculate distance from last point
         const dx = coords.x - this.lastDrawPoint.x;
         const dy = coords.y - this.lastDrawPoint.y;
@@ -267,10 +291,10 @@ class Simulation {
     this.canvas.addEventListener("touchend", (e) => {
       e.preventDefault();
 
-      if (!this.drawingWalls || !this.currentWall) return;
+      if (!this.drawingWalls) return;
 
-      // Finalize the wall - only keep if it has some points
-      if (this.currentWall.length > 1) {
+      if (!this.eraserMode && this.currentWall && this.currentWall.length > 1) {
+        // Finalize the wall - only keep if it has some points
         this.walls.push(this.currentWall);
       }
 
@@ -281,9 +305,10 @@ class Simulation {
     this.canvas.addEventListener("touchcancel", (e) => {
       e.preventDefault();
 
-      if (!this.drawingWalls || !this.currentWall) return;
+      if (!this.drawingWalls) return;
 
-      if (this.currentWall.length > 1) {
+      if (!this.eraserMode && this.currentWall && this.currentWall.length > 1) {
+        // Finalize the wall - only keep if it has some points
         this.walls.push(this.currentWall);
       }
 
