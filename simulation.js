@@ -134,6 +134,40 @@ class Simulation {
 
   // Reset the simulation
   reset() {
+    // Play death sounds for all existing boids if audio is enabled
+    if (
+      this.audioEnabled &&
+      this.audioEngine._initialized &&
+      this.boids.length > 0
+    ) {
+      // Get canvas dimensions for sound placement
+      const canvasWidth = this.canvas.width;
+      const canvasHeight = this.canvas.height;
+
+      // Store the current boids
+      const oldBoids = [...this.boids];
+
+      // Play death sounds for some boids (up to 8 randomly selected)
+      const maxSounds = Math.min(oldBoids.length, 8);
+      const selectedBoids = oldBoids
+        .sort(() => Math.random() - 0.5) // Shuffle array
+        .slice(0, maxSounds);
+
+      // Play the sounds with slight delays for a chorus of cries
+      selectedBoids.forEach((boid, index) => {
+        // Stagger the sounds slightly for a more chaotic effect
+        setTimeout(() => {
+          this.audioEngine.playDeathSound(
+            boid.position.x,
+            boid.position.y,
+            canvasWidth,
+            canvasHeight
+          );
+        }, index * 60); // 60ms delay between each sound
+      });
+    }
+
+    // Create new boids
     this.initBoids(this.config.boidCount);
   }
 
@@ -531,6 +565,24 @@ class Simulation {
 
     const originalLength = this.boids.length;
 
+    // Store boid positions before removal to use for death sound
+    const removedBoids = [];
+
+    // Find which boids will be removed
+    this.boids.forEach((boid) => {
+      const dx = boid.position.x - x;
+      const dy = boid.position.y - y;
+      const distSquared = dx * dx + dy * dy;
+
+      if (distSquared <= radiusSquared) {
+        // Store position for sound effect
+        removedBoids.push({
+          x: boid.position.x,
+          y: boid.position.y,
+        });
+      }
+    });
+
     // Filter out boids that are within the eraser radius
     this.boids = this.boids.filter((boid) => {
       const dx = boid.position.x - x;
@@ -540,6 +592,26 @@ class Simulation {
       // Keep boids that are outside the eraser radius
       return distSquared > radiusSquared;
     });
+
+    // Play death sounds for removed boids if audio is enabled
+    if (
+      this.audioEnabled &&
+      removedBoids.length > 0 &&
+      this.audioEngine._initialized
+    ) {
+      // Play up to 3 death sounds to avoid overwhelming audio
+      const maxSounds = Math.min(removedBoids.length, 3);
+
+      for (let i = 0; i < maxSounds; i++) {
+        const boid = removedBoids[i];
+        this.audioEngine.playDeathSound(
+          boid.x,
+          boid.y,
+          this.canvas.width,
+          this.canvas.height
+        );
+      }
+    }
 
     // Return true if any boids were removed
     return this.boids.length < originalLength;

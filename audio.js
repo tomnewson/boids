@@ -19,6 +19,8 @@ class AudioEngine {
 
     this.lastNoteTriggers = {};
     this.noteThrottle = 200; // Minimum ms between notes from the same source
+    this.lastDeathSoundTime = 0; // Track when we last played a death sound
+    this.deathSoundThrottle = 0; // Minimum ms between death sounds
 
     // Add visibility change listener to handle tab switching
     document.addEventListener(
@@ -147,6 +149,101 @@ class AudioEngine {
       gainNode.disconnect();
       pannerNode.disconnect();
     };
+  }
+
+  // Play a blood-curdling cry when a boid is killed
+  playDeathSound(x, y, canvasWidth, canvasHeight) {
+    if (!this._initialized || !this._audioContext) return;
+
+    // Throttle death sounds to prevent audio overload
+    const now = Date.now();
+    if (now - this.lastDeathSoundTime < this.deathSoundThrottle) return;
+    this.lastDeathSoundTime = now;
+
+    // Calculate pan based on x position
+    const pan = (x / canvasWidth) * 2 - 1; // -1 (left) to 1 (right)
+
+    // Create oscillators for a complex sound
+    const oscCount = 3;
+    const oscillators = [];
+    const gainNodes = [];
+    const pannerNodes = [];
+
+    // Get base frequency from y position but with lower range than normal notes
+    const baseFreq = this.positionToNote(y, canvasHeight) * 0.5; // Halve the frequency to make it lower
+
+    for (let i = 0; i < oscCount; i++) {
+      // Create audio nodes
+      const oscillator = this._audioContext.createOscillator();
+      const gainNode = this._audioContext.createGain();
+      const pannerNode = this._audioContext.createStereoPanner();
+
+      // Connect nodes
+      oscillator.connect(gainNode);
+      gainNode.connect(pannerNode);
+      pannerNode.connect(this._masterGain);
+
+      // Add to arrays for frequency/envelope control
+      oscillators.push(oscillator);
+      gainNodes.push(gainNode);
+      pannerNodes.push(pannerNode);
+
+      // Set pan position
+      pannerNode.pan.value = pan;
+    }
+
+    // Start time
+    const startTime = this._audioContext.currentTime;
+
+    // First oscillator: quick falling pitch (initial scream) - lowered
+    oscillators[0].type = "sawtooth";
+    oscillators[0].frequency.setValueAtTime(baseFreq * 1.5, startTime);
+    oscillators[0].frequency.exponentialRampToValueAtTime(
+      baseFreq * 0.3,
+      startTime + 0.4
+    );
+    gainNodes[0].gain.setValueAtTime(0, startTime);
+    gainNodes[0].gain.linearRampToValueAtTime(0.3, startTime + 0.02);
+    gainNodes[0].gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+
+    // Second oscillator: noisy tone (distorted chip) - lowered
+    oscillators[1].type = "square";
+    oscillators[1].frequency.setValueAtTime(baseFreq * 1.0, startTime + 0.05);
+    oscillators[1].frequency.exponentialRampToValueAtTime(
+      baseFreq * 0.2,
+      startTime + 0.5
+    );
+    gainNodes[1].gain.setValueAtTime(0, startTime);
+    gainNodes[1].gain.linearRampToValueAtTime(0.25, startTime + 0.1);
+    gainNodes[1].gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+
+    // Third oscillator: lower-pitched growl (keeping chip tune feeling but deeper)
+    oscillators[2].type = "triangle";
+    oscillators[2].frequency.setValueAtTime(baseFreq * 2, startTime);
+    oscillators[2].frequency.linearRampToValueAtTime(
+      baseFreq * 1.5,
+      startTime + 0.2
+    );
+    oscillators[2].frequency.exponentialRampToValueAtTime(
+      baseFreq * 0.7,
+      startTime + 0.4
+    );
+    gainNodes[2].gain.setValueAtTime(0, startTime);
+    gainNodes[2].gain.linearRampToValueAtTime(0.2, startTime + 0.05);
+    gainNodes[2].gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+
+    // Start and stop all oscillators
+    const duration = 0.5; // Slightly longer sound duration for lower tones
+    oscillators.forEach((osc, i) => {
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+
+      // Clean up when done
+      osc.onended = () => {
+        gainNodes[i].disconnect();
+        pannerNodes[i].disconnect();
+      };
+    });
   }
 
   // Process boids to generate music
