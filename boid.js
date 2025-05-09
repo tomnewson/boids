@@ -25,6 +25,16 @@ class Boid {
       y: 0,
     };
 
+    // Add previous position for collision resolution
+    this.prevPosition = {
+      x: x,
+      y: y,
+    };
+
+    // Add collision response properties
+    this.collisionRadius = this.size * 0.8; // Slightly smaller than visual size
+    this.restitution = 0.6; // Energy preserved after collision (bounce factor)
+
     // Add color properties
     this.hue = Math.floor(Math.random() * 360); // Random hue between 0-359
     this.baseColor = `hsl(${this.hue}, 100%, 50%)`; // Base HSL color with full saturation and medium lightness
@@ -35,10 +45,21 @@ class Boid {
     );
     this.velocity.x = (this.velocity.x / speed) * this.maxSpeed * 0.5;
     this.velocity.y = (this.velocity.y / speed) * this.maxSpeed * 0.5;
+
+    this.isPredator = false; // Flag to identify predator boids
+    this.predatorDetectionRadius = 100; // How far prey can detect predators
+    this.preyDetectionRadius = 150; // How far predators can detect prey
+    this.predatorChaseStrength = 1.2; // How strongly predators chase prey
+    this.predatorFleeStrength = 2.0; // How strongly prey flee from predators
+    this.huntingCooldown = 0; // Cooldown timer for predator kills
   }
 
   // Update boid's position based on its velocity and acceleration
   update(timeScale = 1.0) {
+    // Store previous position for collision resolution
+    this.prevPosition.x = this.position.x;
+    this.prevPosition.y = this.position.y;
+
     // Store previous velocity for smoothing
     this.prevVelocity.x = this.velocity.x;
     this.prevVelocity.y = this.velocity.y;
@@ -72,9 +93,18 @@ class Boid {
       this.velocity.y = (this.velocity.y / speed) * this.minSpeed;
     }
 
-    // Update position based on velocity with time scaling
-    this.position.x += this.velocity.x * timeScale;
-    this.position.y += this.velocity.y * timeScale;
+    // Calculate next position
+    const nextX = this.position.x + this.velocity.x * timeScale;
+    const nextY = this.position.y + this.velocity.y * timeScale;
+
+    // Check for wall collisions before updating position
+    if (this.checkWallCollision(nextX, nextY)) {
+      // Position has been updated in the collision handling
+    } else {
+      // No collision, update position as normal
+      this.position.x = nextX;
+      this.position.y = nextY;
+    }
 
     // Reset acceleration
     this.acceleration.x = 0;
@@ -82,6 +112,100 @@ class Boid {
 
     // Wrap around edges
     this.edges();
+
+    // Decrement hunting cooldown if it exists
+    if (this.huntingCooldown > 0) {
+      this.huntingCooldown -= timeScale;
+    }
+  }
+
+  // Check for wall collisions and handle them
+  checkWallCollision(nextX, nextY, simulation) {
+    // Get the simulation object from the window if not provided
+    if (!simulation && window.simulation) {
+      simulation = window.simulation;
+    }
+
+    // If there's no simulation available, we can't check for walls
+    if (!simulation) return false;
+
+    // Check if the boid's next position would intersect a wall
+    if (simulation.isPointNearWall(nextX, nextY, this.collisionRadius)) {
+      this.handleWallCollision(simulation);
+      return true;
+    }
+
+    // Check for collisions along the path (for fast-moving boids)
+    const moveDistSq =
+      (nextX - this.position.x) * (nextX - this.position.x) +
+      (nextY - this.position.y) * (nextY - this.position.y);
+
+    // If the boid is moving fast enough to potentially skip over walls, check intermediate points
+    if (moveDistSq > this.collisionRadius * this.collisionRadius) {
+      const steps = Math.ceil(
+        Math.sqrt(moveDistSq) / (this.collisionRadius * 0.5)
+      );
+      const stepX = (nextX - this.position.x) / steps;
+      const stepY = (nextY - this.position.y) / steps;
+
+      for (let i = 1; i < steps; i++) {
+        const checkX = this.position.x + stepX * i;
+        const checkY = this.position.y + stepY * i;
+
+        if (simulation.isPointNearWall(checkX, checkY, this.collisionRadius)) {
+          this.handleWallCollision(simulation);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  // Handle collision with a wall
+  handleWallCollision(simulation) {
+    // Get the normal vector from the wall
+    const normal = simulation.getWallNormal(this.position.x, this.position.y);
+
+    // Calculate reflection for velocity
+    const dotProduct = this.velocity.x * normal.x + this.velocity.y * normal.y;
+
+    // Apply reflection formula: v' = v - 2(v·n)n
+    this.velocity.x = this.velocity.x - 2 * dotProduct * normal.x;
+    this.velocity.y = this.velocity.y - 2 * dotProduct * normal.y;
+
+    // Apply restitution (energy loss)
+    this.velocity.x *= this.restitution;
+    this.velocity.y *= this.restitution;
+
+    // Ensure minimum speed
+    const speed = Math.sqrt(
+      this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
+    );
+
+    if (speed < this.minSpeed) {
+      // Normalize and scale to minimum speed
+      this.velocity.x = (this.velocity.x / speed) * this.minSpeed;
+      this.velocity.y = (this.velocity.y / speed) * this.minSpeed;
+    }
+
+    // Move boid along the new direction slightly to prevent getting stuck
+    this.position.x += this.velocity.x * 0.1;
+    this.position.y += this.velocity.y * 0.1;
+
+    // Move boid away from the wall if it's still too close
+    if (
+      simulation.isPointNearWall(
+        this.position.x,
+        this.position.y,
+        this.collisionRadius
+      )
+    ) {
+      // Push the boid out along the normal vector
+      const pushDistance = this.collisionRadius + 1; // Extra 1px for safety
+      this.position.x += normal.x * pushDistance;
+      this.position.y += normal.y * pushDistance;
+    }
   }
 
   // Apply force to boid's acceleration with smoothing
@@ -326,6 +450,17 @@ class Boid {
       x: cohesion.x * dynamicCohFactor,
       y: cohesion.y * dynamicCohFactor,
     });
+
+    // Apply predator-prey behavior
+    if (boids.length > 1) {
+      if (this.isPredator) {
+        // Predators chase nearby prey
+        this.chasePrey(boids);
+      } else {
+        // Normal boids flee from predators
+        this.fleeFromPredators(boids);
+      }
+    }
   }
 
   // Wall avoidance method
@@ -414,32 +549,232 @@ class Boid {
     }
   }
 
+  // Method for predators to chase prey
+  chasePrey(boids) {
+    if (!this.isPredator || this.huntingCooldown > 0) return;
+
+    let nearestPreyDist = Infinity;
+    let nearestPrey = null;
+    let chaseVector = { x: 0, y: 0 };
+
+    // Find the nearest prey
+    for (const other of boids) {
+      if (other === this || other.isPredator) continue; // Skip self and other predators
+
+      const dx = other.position.x - this.position.x;
+      const dy = other.position.y - this.position.y;
+      const distSquared = dx * dx + dy * dy;
+
+      // Only consider prey within detection range
+      if (distSquared < this.preyDetectionRadius * this.preyDetectionRadius) {
+        if (distSquared < nearestPreyDist) {
+          nearestPreyDist = distSquared;
+          nearestPrey = other;
+
+          // Calculate normalized direction vector to prey
+          const dist = Math.sqrt(distSquared);
+          if (dist > 0) {
+            chaseVector.x = dx / dist;
+            chaseVector.y = dy / dist;
+          }
+        }
+      }
+    }
+
+    // If found prey, apply chase force
+    if (nearestPrey) {
+      // Stronger chase force when closer to prey (inverse square law)
+      const chaseStrength =
+        this.predatorChaseStrength *
+        (1 +
+          (this.preyDetectionRadius - Math.sqrt(nearestPreyDist)) /
+            this.preyDetectionRadius);
+
+      const chaseForce = {
+        x: chaseVector.x * this.maxSpeed * chaseStrength,
+        y: chaseVector.y * this.maxSpeed * chaseStrength,
+      };
+
+      // Subtract current velocity to get steering force
+      chaseForce.x -= this.velocity.x;
+      chaseForce.y -= this.velocity.y;
+
+      // Limit the chase force
+      const forceMag = Math.sqrt(
+        chaseForce.x * chaseForce.x + chaseForce.y * chaseForce.y
+      );
+      if (forceMag > this.maxForce * 2) {
+        // Allow stronger chase forces
+        chaseForce.x = (chaseForce.x / forceMag) * this.maxForce * 2;
+        chaseForce.y = (chaseForce.y / forceMag) * this.maxForce * 2;
+      }
+
+      // Apply the chase force
+      this.applyForce(chaseForce);
+
+      // Check for collision with prey
+      this.checkPreyCollision(nearestPrey, nearestPreyDist);
+    }
+  }
+
+  // Method for normal boids to flee from predators
+  fleeFromPredators(boids) {
+    if (this.isPredator) return; // Only prey flee
+
+    let fleeVector = { x: 0, y: 0 };
+    let nearestPredatorDist = Infinity;
+    let predatorCount = 0;
+
+    // Check all nearby predators
+    for (const other of boids) {
+      if (other === this || !other.isPredator) continue; // Skip self and non-predators
+
+      const dx = this.position.x - other.position.x; // Note: reversed direction - away from predator
+      const dy = this.position.y - other.position.y;
+      const distSquared = dx * dx + dy * dy;
+
+      // Only consider predators within detection range
+      if (
+        distSquared <
+        this.predatorDetectionRadius * this.predatorDetectionRadius
+      ) {
+        predatorCount++;
+
+        // Normalize flee vector
+        const dist = Math.sqrt(distSquared);
+        if (dist > 0) {
+          // Weight: stronger response to closer predators
+          const weight = 1 / Math.max(0.1, distSquared);
+
+          // Add to flee vector (weighted by inverse squared distance)
+          fleeVector.x += (dx / dist) * weight;
+          fleeVector.y += (dy / dist) * weight;
+
+          // Track nearest predator
+          if (distSquared < nearestPredatorDist) {
+            nearestPredatorDist = distSquared;
+          }
+        }
+      }
+    }
+
+    // Apply flee force if predators are nearby
+    if (predatorCount > 0) {
+      // Normalize the flee vector
+      const magnitude = Math.sqrt(
+        fleeVector.x * fleeVector.x + fleeVector.y * fleeVector.y
+      );
+      if (magnitude > 0) {
+        // Scale by max speed and flee strength
+        fleeVector.x =
+          (fleeVector.x / magnitude) *
+          this.maxSpeed *
+          this.predatorFleeStrength;
+        fleeVector.y =
+          (fleeVector.y / magnitude) *
+          this.maxSpeed *
+          this.predatorFleeStrength;
+
+        // Subtract current velocity to get steering force
+        fleeVector.x -= this.velocity.x;
+        fleeVector.y -= this.velocity.y;
+
+        // Limit the flee force but allow it to be stronger than normal steering
+        const fleeMag = Math.sqrt(
+          fleeVector.x * fleeVector.x + fleeVector.y * fleeVector.y
+        );
+        if (fleeMag > this.maxForce * 3) {
+          // Allow stronger flee forces
+          fleeVector.x = (fleeVector.x / fleeMag) * this.maxForce * 3;
+          fleeVector.y = (fleeVector.y / fleeMag) * this.maxForce * 3;
+        }
+
+        // Scale force by proximity - more urgent when predator is very close
+        const proximityFactor =
+          1 +
+          ((this.predatorDetectionRadius - Math.sqrt(nearestPredatorDist)) /
+            this.predatorDetectionRadius) *
+            2;
+
+        fleeVector.x *= proximityFactor;
+        fleeVector.y *= proximityFactor;
+
+        // Apply the flee force
+        this.applyForce(fleeVector);
+      }
+    }
+  }
+
+  // Check if this predator collides with prey
+  checkPreyCollision(prey, distSquared) {
+    if (!this.isPredator || this.huntingCooldown > 0 || !prey) return false;
+
+    // Collision radius is sum of both boid sizes
+    const collisionRadiusSq = Math.pow(this.size + prey.size, 2);
+
+    // If predator is touching prey, mark prey for death
+    if (distSquared <= collisionRadiusSq) {
+      prey.killed = true;
+
+      // Add cooldown to prevent immediate chasing of next prey
+      this.huntingCooldown = 30; // frames cooldown
+
+      return true;
+    }
+
+    return false;
+  }
+
   // Calculate color based on boid properties
   getColor() {
-    // Calculate current speed
-    const speed = Math.sqrt(
-      this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
-    );
+    // Predator boids use a red hue
+    if (this.isPredator) {
+      // Calculate current speed for saturation
+      const speed = Math.sqrt(
+        this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
+      );
 
-    // Normalize speed (0 to 1)
-    const normalizedSpeed = Math.min(speed / this.maxSpeed, 1.0);
+      // Normalize speed (0 to 1)
+      const normalizedSpeed = Math.min(speed / this.maxSpeed, 1.0);
 
-    // Calculate saturation based on speed (faster = more saturated)
-    // Changed from 50-100% to 30-70% for lower saturation values
-    const saturation = 30 + normalizedSpeed * 40;
+      // Fixed hue for predators (red)
+      const hue = 0;
 
-    // Calculate lightness based on height (higher = brighter)
-    const normalizedHeight = this.position.y / this.canvas.height;
-    const lightness = 30 + (1 - normalizedHeight) * 50; // Higher boids (lower y values) are brighter (30% to 80%)
+      // Calculate saturation based on speed
+      const saturation = 70 + normalizedSpeed * 30;
 
-    // Apply a subtle hue shift based on horizontal position
-    // This keeps the base hue but adds a slight shift (-10 to +10 degrees)
-    const normalizedX = this.position.x / this.canvas.width;
-    const hueShift = (normalizedX - 0.5) * 20; // -10 to +10 degree shift
-    const adjustedHue = (this.hue + hueShift + 360) % 360; // Ensure it stays in 0-359 range
+      // Calculate lightness based on height
+      const normalizedHeight = this.position.y / this.canvas.height;
+      const lightness = 40 + (1 - normalizedHeight) * 30;
 
-    // Return the final HSL color
-    return `hsl(${adjustedHue}, ${saturation}%, ${lightness}%)`;
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    } else {
+      // Normal boid color calculation (unchanged)
+      // Calculate current speed
+      const speed = Math.sqrt(
+        this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
+      );
+
+      // Normalize speed (0 to 1)
+      const normalizedSpeed = Math.min(speed / this.maxSpeed, 1.0);
+
+      // Calculate saturation based on speed (faster = more saturated)
+      // Changed from 50-100% to 30-70% for lower saturation values
+      const saturation = 30 + normalizedSpeed * 40;
+
+      // Calculate lightness based on height (higher = brighter)
+      const normalizedHeight = this.position.y / this.canvas.height;
+      const lightness = 30 + (1 - normalizedHeight) * 50; // Higher boids (lower y values) are brighter (30% to 80%)
+
+      // Apply a subtle hue shift based on horizontal position
+      // This keeps the base hue but adds a slight shift (-10 to +10 degrees)
+      const normalizedX = this.position.x / this.canvas.width;
+      const hueShift = (normalizedX - 0.5) * 20; // -10 to +10 degree shift
+      const adjustedHue = (this.hue + hueShift + 360) % 360; // Ensure it stays in 0-359 range
+
+      // Return the final HSL color
+      return `hsl(${adjustedHue}, ${saturation}%, ${lightness}%)`;
+    }
   }
 
   // Count nearby neighbors for flock position awareness
@@ -475,7 +810,9 @@ class Boid {
 
     // Get neighbor count for size adjustment
     const neighborCount = this.countNeighbors(boids);
-    const sizeMultiplier = Math.min(1 + neighborCount / 20, 1.5); // Max 50% larger based on neighbor count
+    const sizeMultiplier = this.isPredator
+      ? 1.2 // Predators are slightly larger
+      : Math.min(1 + neighborCount / 20, 1.5); // Max 50% larger based on neighbor count
 
     // Draw the boid as a triangle with dynamic size
     ctx.beginPath();
@@ -490,10 +827,14 @@ class Boid {
     // Fill the triangle
     ctx.fill();
 
-    // Add a very subtle stroke with same color but slightly transparent
-    // This helps with anti-aliasing the edges
-    ctx.strokeStyle = dynamicColor;
-    ctx.lineWidth = 0.5;
+    // Add a stroke - red for predators, subtle for normal boids
+    if (this.isPredator) {
+      ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+      ctx.lineWidth = 1.5;
+    } else {
+      ctx.strokeStyle = dynamicColor;
+      ctx.lineWidth = 0.5;
+    }
     ctx.lineJoin = "round";
     ctx.stroke();
 

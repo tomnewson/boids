@@ -183,24 +183,37 @@ window.onload = () => {
 
     // Toggle to boid spawner tool
     function toggleBoidSpawner() {
-      clearActiveBrushes();
+      const wasAlreadyActive = simulation.spawnBoidMode;
 
-      // Exit eraser mode if active
-      if (simulation.eraserMode) {
-        simulation.toggleEraserMode();
-      }
+      // If already in boid spawner mode, toggle predator mode
+      if (wasAlreadyActive) {
+        const predatorActive = simulation.togglePredatorMode();
 
-      // Toggle boid spawner mode
-      const spawnerActive = simulation.toggleBoidSpawner();
+        // Update button appearance to indicate predator mode
+        if (predatorActive) {
+          // Change to predator visual indicator
+          brushBtn2.textContent = "🦅"; // Eagle emoji for predator
+          brushBtn2.title = "Predator Spawner Active";
+        } else {
+          // Change back to prey visual indicator
+          brushBtn2.textContent = "🧬"; // Original emoji for normal boids
+          brushBtn2.title = "Boid Spawner Active";
+        }
+      } else {
+        clearActiveBrushes();
 
-      if (spawnerActive) {
+        // Exit eraser mode if active
+        if (simulation.eraserMode) {
+          simulation.toggleEraserMode();
+        }
+
+        // Toggle boid spawner mode
+        simulation.toggleBoidSpawner();
+
         // Now in boid spawner mode
         brushBtn2.classList.add("active");
+        brushBtn2.textContent = "🧬"; // Reset to original emoji
         brushBtn2.title = "Boid Spawner Active";
-      } else {
-        // Switch back to default brush
-        brushBtn1.classList.add("active");
-        brushBtn2.title = "Switch to Boid Spawner";
       }
     }
 

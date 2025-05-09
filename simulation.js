@@ -12,6 +12,10 @@ class Simulation {
     this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
     this.wallNeedsUpdate = true; // Flag to redraw walls only when needed
 
+    // Create a spatial index for walls to improve collision detection performance (moved here)
+    this.wallSpatialIndex = new Map();
+    this.gridCellSize = 20; // Size of each grid cell in the spatial index
+
     this.boids = [];
     this.running = true;
     this.separationFactor = 1.5;
@@ -45,6 +49,7 @@ class Simulation {
     this.minDrawDistance = 2; // Significantly reduced for continuous walls
     this.eraserMode = false; // Track if we're in eraser mode
     this.spawnBoidMode = false; // Track if we're in boid spawning mode
+    this.predatorMode = false; // Track if we're spawning predator boids
     this.eraserSize = this.wallBrushSize * 3; // Size of eraser relative to brush size
 
     // Set cursor to crosshair by default since drawing is always enabled
@@ -82,6 +87,9 @@ class Simulation {
     // Apply special handling for Safari/iOS devices
     this.applySafariOptimizations();
 
+    // Initialize the spatial index after walls are set up
+    this.rebuildWallSpatialIndex();
+
     // Start animation loop
     this.animate();
 
@@ -102,6 +110,9 @@ class Simulation {
     this.wallCanvas.width = this.canvas.width;
     this.wallCanvas.height = this.canvas.height;
     this.wallNeedsUpdate = true; // Mark walls for redraw
+
+    // Rebuild spatial index when canvas size changes
+    this.rebuildWallSpatialIndex();
   }
 
   // Handle window resize events
@@ -119,6 +130,42 @@ class Simulation {
     for (const boid of this.boids) {
       if (boid.position.x > width) boid.position.x = width - 10;
       if (boid.position.y > height) boid.position.y = height - 10;
+    }
+
+    // Rebuild spatial index when canvas size changes
+    this.rebuildWallSpatialIndex();
+  }
+
+  // Create a spatial index for more efficient wall collision detection
+  rebuildWallSpatialIndex() {
+    this.wallSpatialIndex.clear();
+
+    // Index all walls by grid cell
+    for (const wall of this.walls) {
+      for (const point of wall) {
+        const cellX = Math.floor(point.x / this.gridCellSize);
+        const cellY = Math.floor(point.y / this.gridCellSize);
+        const cellKey = `${cellX},${cellY}`;
+
+        if (!this.wallSpatialIndex.has(cellKey)) {
+          this.wallSpatialIndex.set(cellKey, []);
+        }
+        this.wallSpatialIndex.get(cellKey).push(point);
+      }
+    }
+
+    // Also add the current wall being drawn
+    if (this.currentWall) {
+      for (const point of this.currentWall) {
+        const cellX = Math.floor(point.x / this.gridCellSize);
+        const cellY = Math.floor(point.y / this.gridCellSize);
+        const cellKey = `${cellX},${cellY}`;
+
+        if (!this.wallSpatialIndex.has(cellKey)) {
+          this.wallSpatialIndex.set(cellKey, []);
+        }
+        this.wallSpatialIndex.get(cellKey).push(point);
+      }
     }
   }
 
@@ -282,6 +329,8 @@ class Simulation {
       // Finalize the wall - only keep if it has some points
       if (this.currentWall.length > 1) {
         this.walls.push(this.currentWall);
+        // Update the spatial index with the new wall
+        this.rebuildWallSpatialIndex();
       }
 
       this.currentWall = null;
@@ -295,6 +344,8 @@ class Simulation {
 
       if (this.currentWall.length > 1) {
         this.walls.push(this.currentWall);
+        // Update the spatial index with the new wall
+        this.rebuildWallSpatialIndex();
       }
 
       this.currentWall = null;
@@ -397,6 +448,8 @@ class Simulation {
       if (!this.eraserMode && this.currentWall && this.currentWall.length > 1) {
         // Finalize the wall - only keep if it has some points
         this.walls.push(this.currentWall);
+        // Update the spatial index with the new wall
+        this.rebuildWallSpatialIndex();
       }
 
       this.currentWall = null;
@@ -412,6 +465,8 @@ class Simulation {
       if (!this.eraserMode && this.currentWall && this.currentWall.length > 1) {
         // Finalize the wall - only keep if it has some points
         this.walls.push(this.currentWall);
+        // Update the spatial index with the new wall
+        this.rebuildWallSpatialIndex();
       }
 
       this.currentWall = null;
@@ -443,6 +498,22 @@ class Simulation {
           this.currentWall.push({
             x: x + offsetX,
             y: y + offsetY,
+            size: pointSize,
+          });
+
+          // Also add point to the spatial index
+          const pointX = x + offsetX;
+          const pointY = y + offsetY;
+          const cellX = Math.floor(pointX / this.gridCellSize);
+          const cellY = Math.floor(pointY / this.gridCellSize);
+          const cellKey = `${cellX},${cellY}`;
+
+          if (!this.wallSpatialIndex.has(cellKey)) {
+            this.wallSpatialIndex.set(cellKey, []);
+          }
+          this.wallSpatialIndex.get(cellKey).push({
+            x: pointX,
+            y: pointY,
             size: pointSize,
           });
         }
@@ -485,10 +556,29 @@ class Simulation {
       this.eraserMode = false;
     }
 
+    // Reset predator mode when toggling spawner off
+    if (!this.spawnBoidMode) {
+      this.predatorMode = false;
+    }
+
     // Update cursor based on mode
     this.updateCursor();
 
     return this.spawnBoidMode;
+  }
+
+  // Toggle between normal and predator boid types
+  togglePredatorMode() {
+    // Only toggle if we're in spawn mode
+    if (this.spawnBoidMode) {
+      this.predatorMode = !this.predatorMode;
+
+      // Update cursor to reflect the current mode
+      this.updateCursor();
+
+      return this.predatorMode;
+    }
+    return false;
   }
 
   // Update cursor appearance based on current mode
@@ -497,8 +587,15 @@ class Simulation {
       this.canvas.style.cursor =
         'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff000055"/></svg>\') 12 12, auto';
     } else if (this.spawnBoidMode) {
-      this.canvas.style.cursor =
-        'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%2300ff0055"/><circle cx="12" cy="12" r="4" fill="%2300ff00aa"/></svg>\') 12 12, auto';
+      if (this.predatorMode) {
+        // Predator boid cursor (red color)
+        this.canvas.style.cursor =
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ff000055"/><circle cx="12" cy="12" r="4" fill="%23ff0000aa"/></svg>\') 12 12, auto';
+      } else {
+        // Normal boid cursor (green color)
+        this.canvas.style.cursor =
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%2300ff0055"/><circle cx="12" cy="12" r="4" fill="%2300ff00aa"/></svg>\') 12 12, auto';
+      }
     } else {
       this.canvas.style.cursor = "crosshair";
     }
@@ -509,6 +606,11 @@ class Simulation {
     if (this.spawnBoidMode) {
       // Create a new boid at the specified position
       const newBoid = new Boid(x, y, this.canvas);
+
+      // If in predator mode, mark this boid as a predator (for future implementation)
+      if (this.predatorMode) {
+        newBoid.isPredator = true;
+      }
 
       // Add some initial velocity in a random direction
       const angle = Math.random() * Math.PI * 2;
@@ -551,6 +653,9 @@ class Simulation {
     if (wallsModified) {
       this.walls = this.walls.filter((wall) => wall.length > 0);
       this.wallNeedsUpdate = true; // Mark walls for redraw
+
+      // Rebuild the spatial index after erasing
+      this.rebuildWallSpatialIndex();
     }
 
     // Also remove any boids within the eraser radius
@@ -620,33 +725,54 @@ class Simulation {
   // Clear all walls
   clearWalls() {
     this.walls = [];
+    this.wallSpatialIndex.clear(); // Clear the spatial index
     this.wallNeedsUpdate = true; // Mark walls for redraw
   }
 
-  // Check if a point is close to a wall (for boid collision detection)
-  isPointNearWall(x, y, radius) {
-    // Check each wall (which is now a collection of brush points)
-    for (let w = 0; w < this.walls.length; w++) {
-      const wall = this.walls[w];
+  // Get wall points near a position using spatial indexing
+  getWallPointsNearPosition(x, y, radius) {
+    const cellRadius = Math.ceil(radius / this.gridCellSize);
+    const centerCellX = Math.floor(x / this.gridCellSize);
+    const centerCellY = Math.floor(y / this.gridCellSize);
+    const nearbyPoints = [];
 
-      // Check each brush point in the wall
-      for (let p = 0; p < wall.length; p++) {
-        const point = wall[p];
+    // Check cells in a square around the position
+    for (let offsetX = -cellRadius; offsetX <= cellRadius; offsetX++) {
+      for (let offsetY = -cellRadius; offsetY <= cellRadius; offsetY++) {
+        const cellKey = `${centerCellX + offsetX},${centerCellY + offsetY}`;
 
-        // Simple distance check between point and brush point
-        const dx = x - point.x;
-        const dy = y - point.y;
-        const distanceSquared = dx * dx + dy * dy;
-
-        // If the point is within the brush point radius plus the check radius
-        // Note: we use a smaller value than before to let boids get closer
-        if (distanceSquared < Math.pow(point.size / 2 + radius * 0.6, 2)) {
-          return true;
+        // Get points in this cell and add to our collection
+        if (this.wallSpatialIndex.has(cellKey)) {
+          nearbyPoints.push(...this.wallSpatialIndex.get(cellKey));
         }
       }
     }
 
-    // Also check the current wall being drawn
+    return nearbyPoints;
+  }
+
+  // Check if a point is close to a wall (for boid collision detection)
+  isPointNearWall(x, y, radius) {
+    // Use spatial index to get nearby wall points
+    const nearbyPoints = this.getWallPointsNearPosition(
+      x,
+      y,
+      radius + this.wallBrushSize
+    );
+
+    // Check distance against each nearby point
+    for (const point of nearbyPoints) {
+      const dx = x - point.x;
+      const dy = y - point.y;
+      const distanceSquared = dx * dx + dy * dy;
+
+      // If the point is within the brush point radius plus the check radius
+      if (distanceSquared < Math.pow(point.size / 2 + radius * 0.6, 2)) {
+        return true;
+      }
+    }
+
+    // Also check the current wall being drawn if it exists
     if (this.currentWall && this.currentWall.length > 0) {
       for (let p = 0; p < this.currentWall.length; p++) {
         const point = this.currentWall[p];
@@ -670,26 +796,26 @@ class Simulation {
     let closestDistance = Infinity;
     let normal = { x: 0, y: 0 };
 
-    // Check each wall (collection of brush points)
-    for (const wall of this.walls) {
-      // Check each brush point in the wall
-      for (const point of wall) {
-        // Calculate distance from boid to brush point
-        const dx = x - point.x;
-        const dy = y - point.y;
-        const distanceSquared = dx * dx + dy * dy;
+    // Use spatial index to get nearby wall points
+    const nearbyPoints = this.getWallPointsNearPosition(x, y, 50); // 50 is a reasonable search radius
 
-        // If this is the closest wall point so far
-        if (distanceSquared < closestDistance) {
-          closestDistance = distanceSquared;
+    // Find the closest point and calculate normal
+    for (const point of nearbyPoints) {
+      // Calculate distance from point to wall point
+      const dx = x - point.x;
+      const dy = y - point.y;
+      const distanceSquared = dx * dx + dy * dy;
 
-          // Normalize the vector away from the wall point
-          const distance = Math.sqrt(distanceSquared);
-          if (distance > 0) {
-            // Normal points away from the wall point
-            normal.x = dx / distance;
-            normal.y = dy / distance;
-          }
+      // If this is the closest wall point so far
+      if (distanceSquared < closestDistance) {
+        closestDistance = distanceSquared;
+
+        // Normalize the vector away from the wall point
+        const distance = Math.sqrt(distanceSquared);
+        if (distance > 0) {
+          // Normal points away from the wall point
+          normal.x = dx / distance;
+          normal.y = dy / distance;
         }
       }
     }
@@ -697,7 +823,7 @@ class Simulation {
     // Also check the current wall being drawn
     if (this.currentWall && this.currentWall.length > 0) {
       for (const point of this.currentWall) {
-        // Calculate distance from boid to current wall point
+        // Calculate distance from point to current wall point
         const dx = x - point.x;
         const dy = y - point.y;
         const distanceSquared = dx * dx + dy * dy;
@@ -865,14 +991,16 @@ class Simulation {
     // Scale factor helps maintain consistent speed across different devices/framerates
     const timeScale = deltaTime / this.timeStep;
 
+    // Track boids that have been killed by predators
+    const killedBoids = [];
+
     for (const boid of this.boids) {
       // Always apply cursor avoidance first if the method exists
       if (typeof boid.avoidCursor === "function") {
         boid.avoidCursor(this);
       }
 
-      // Check for wall collisions and provide wall avoidance vectors
-      // Also check for currentWall to handle the first wall being drawn
+      // Apply wall avoidance forces (steering away from walls)
       if (
         this.walls.length > 0 ||
         (this.currentWall && this.currentWall.length > 0)
@@ -880,13 +1008,43 @@ class Simulation {
         boid.avoidWalls(this);
       }
 
+      // Apply flocking behaviors
       boid.flock(
         this.boids,
         this.separationFactor,
         this.alignmentFactor,
         this.cohesionFactor
       );
-      boid.update(timeScale); // Pass time scaling factor to boid update
+
+      // Update boid position and apply true collision detection
+      boid.update(timeScale);
+
+      // Check if this boid has been killed by a predator
+      if (boid.killed) {
+        killedBoids.push(boid);
+      }
+    }
+
+    // Remove killed boids
+    if (killedBoids.length > 0) {
+      // Play death sounds for killed boids if audio is enabled
+      if (this.audioEnabled && this.audioEngine._initialized) {
+        // Play up to 2 death sounds to avoid overwhelming audio
+        const maxSounds = Math.min(killedBoids.length, 2);
+
+        for (let i = 0; i < maxSounds; i++) {
+          const boid = killedBoids[i];
+          this.audioEngine.playDeathSound(
+            boid.position.x,
+            boid.position.y,
+            this.canvas.width,
+            this.canvas.height
+          );
+        }
+      }
+
+      // Filter out killed boids
+      this.boids = this.boids.filter((boid) => !boid.killed);
     }
 
     // Process audio if enabled
