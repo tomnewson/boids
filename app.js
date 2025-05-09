@@ -82,12 +82,17 @@ window.onload = () => {
     const minimizeBtn = document.getElementById("minimize-btn");
     const floatingControls = document.querySelector(".floating-controls");
 
-    // New brush control buttons
-    const brushBtn1 = document.getElementById("brush-btn-1");
-    const brushBtn2 = document.getElementById("brush-btn-2");
+    // Brush control buttons
+    const brushBtn1 = document.getElementById("brush-btn-1"); // WALL mode
+    const brushBtn2 = document.getElementById("brush-btn-2"); // BOID/PREDATOR mode
 
     // Initialize minimize state
     let isMinimized = false;
+
+    // Track button states
+    const buttonState = {
+      boidModePredator: false, // false = normal boid, true = predator
+    };
 
     // Update simulation parameters when sliders change
     function updateParams() {
@@ -143,77 +148,45 @@ window.onload = () => {
       brushBtn2.classList.remove("active");
     }
 
-    // Toggle eraser mode
-    function toggleEraser() {
+    // Set cursor to ERASER mode
+    function setEraserMode() {
       clearActiveBrushes();
-
-      // Exit boid spawner mode if active
-      if (simulation.spawnBoidMode) {
-        simulation.toggleBoidSpawner();
-      }
-
-      const eraserActive = simulation.toggleEraserMode();
-      if (eraserActive) {
-        // Now in eraser mode
-        eraserBtn.classList.add("active");
-        eraserBtn.title = "Eraser Mode Active";
-      } else {
-        // Now in drawing mode
-        brushBtn1.classList.add("active");
-        eraserBtn.title = "Switch to Eraser Mode";
-      }
+      eraserBtn.classList.add("active");
+      simulation.setCursorMode(simulation.CURSOR_MODES.ERASER);
     }
 
-    // Toggle to brush tool 1 (default drawing mode)
-    function toggleBrush1() {
+    // Set cursor to WALL mode
+    function setWallMode() {
       clearActiveBrushes();
-
-      // Exit any special modes
-      if (simulation.eraserMode) {
-        simulation.toggleEraserMode();
-      }
-      if (simulation.spawnBoidMode) {
-        simulation.toggleBoidSpawner();
-      }
-
-      // Add active class to brush 1 button
       brushBtn1.classList.add("active");
-      brushBtn1.title = "Wall Drawing Mode Active";
+      simulation.setCursorMode(simulation.CURSOR_MODES.WALL);
     }
 
-    // Toggle to boid spawner tool
-    function toggleBoidSpawner() {
-      const wasAlreadyActive = simulation.spawnBoidMode;
+    // Toggle between BOID and PREDATOR modes
+    function toggleBoidMode() {
+      clearActiveBrushes();
+      brushBtn2.classList.add("active");
 
-      // If already in boid spawner mode, toggle predator mode
-      if (wasAlreadyActive) {
-        const predatorActive = simulation.togglePredatorMode();
+      const isSpawnerMode =
+        simulation.getCursorMode() === simulation.CURSOR_MODES.BOID ||
+        simulation.getCursorMode() === simulation.CURSOR_MODES.PREDATOR;
 
-        // Update button appearance to indicate predator mode
-        if (predatorActive) {
-          // Change to predator visual indicator
-          brushBtn2.textContent = "🦅"; // Eagle emoji for predator
-          brushBtn2.title = "Predator Spawner Active";
-        } else {
-          // Change back to prey visual indicator
-          brushBtn2.textContent = "🧬"; // Original emoji for normal boids
-          brushBtn2.title = "Boid Spawner Active";
-        }
+      // Toggle between BOID and PREDATOR modes
+      if (
+        (buttonState.boidModePredator && isSpawnerMode) ||
+        (!buttonState.boidModePredator && !isSpawnerMode)
+      ) {
+        // Switch to normal boid mode
+        simulation.setCursorMode(simulation.CURSOR_MODES.BOID);
+        buttonState.boidModePredator = false;
+        brushBtn2.textContent = "🧬"; // Original emoji for normal boids
+        brushBtn2.title = "Boid Spawner Mode";
       } else {
-        clearActiveBrushes();
-
-        // Exit eraser mode if active
-        if (simulation.eraserMode) {
-          simulation.toggleEraserMode();
-        }
-
-        // Toggle boid spawner mode
-        simulation.toggleBoidSpawner();
-
-        // Now in boid spawner mode
-        brushBtn2.classList.add("active");
-        brushBtn2.textContent = "🧬"; // Reset to original emoji
-        brushBtn2.title = "Boid Spawner Active";
+        // Switch to predator mode
+        simulation.setCursorMode(simulation.CURSOR_MODES.PREDATOR);
+        buttonState.boidModePredator = true;
+        brushBtn2.textContent = "🦅"; // Eagle emoji for predator
+        brushBtn2.title = "Predator Spawner Mode";
       }
     }
 
@@ -243,26 +216,20 @@ window.onload = () => {
     cohesionSlider.addEventListener("input", updateParams);
     resetBtn.addEventListener("click", () => simulation.reset());
     audioBtn.addEventListener("click", toggleAudio);
-    eraserBtn.addEventListener("click", toggleEraser);
-    brushBtn1.addEventListener("click", toggleBrush1);
-    brushBtn2.addEventListener("click", toggleBoidSpawner);
+    eraserBtn.addEventListener("click", setEraserMode);
+    brushBtn1.addEventListener("click", setWallMode);
+    brushBtn2.addEventListener("click", toggleBoidMode);
     clearWallsBtn.addEventListener("click", clearWalls);
     minimizeBtn.addEventListener("click", toggleMinimize);
 
     // Initialize parameter display
     updateParams();
 
-    // Set boid spawner as the default active tool instead of the wall drawing tool
+    // Set boid spawner as the default active tool
     clearActiveBrushes();
     brushBtn2.classList.add("active");
-    brushBtn2.title = "Boid Spawner Active";
-
-    // Activate boid spawner mode in the simulation
-    simulation.toggleBoidSpawner();
-
-    // Update button titles for better UI feedback
-    brushBtn1.title = "Wall Drawing Mode (Default)";
-    brushBtn2.title = "Switch to Boid Spawner";
+    brushBtn2.title = "Boid Spawner Mode";
+    simulation.setCursorMode(simulation.CURSOR_MODES.BOID);
   } catch (error) {
     console.error("Error initializing simulation:", error);
   }

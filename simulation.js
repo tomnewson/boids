@@ -12,9 +12,20 @@ class Simulation {
     this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
     this.wallNeedsUpdate = true; // Flag to redraw walls only when needed
 
-    // Create a spatial index for walls to improve collision detection performance (moved here)
+    // Create a spatial index for walls to improve collision detection performance
     this.wallSpatialIndex = new Map();
     this.gridCellSize = 20; // Size of each grid cell in the spatial index
+
+    // Define cursor modes as an enum-like object
+    this.CURSOR_MODES = {
+      WALL: "WALL",
+      ERASER: "ERASER",
+      BOID: "BOID",
+      PREDATOR: "PREDATOR",
+    };
+
+    // Current cursor mode (default to WALL)
+    this.cursorMode = this.CURSOR_MODES.WALL;
 
     this.boids = [];
     this.running = true;
@@ -28,7 +39,6 @@ class Simulation {
         config.useHighPerformanceMode !== undefined
           ? config.useHighPerformanceMode
           : true,
-      // Set default boid count to 0 instead of 100
       boidCount: config.boidCount !== undefined ? config.boidCount : 0,
       targetFPS: config.targetFPS || 60,
     };
@@ -36,23 +46,19 @@ class Simulation {
     // Add cursor tracking with more subtle parameters
     this.cursorPosition = { x: -100, y: -100 }; // Start off-screen
     this.cursorRadius = 20; // Reduced from 60 to 40
-    this.cursorAvoidStrength = 0.1; // Reduced from 3.5 to 1.8 for less noticeable avoidance
+    this.cursorAvoidStrength = 0.1;
     this.touchActive = false; // Track if touch is currently active
 
     // Wall drawing functionality
     this.walls = []; // Array to store wall points
-    this.drawingWalls = true; // Always enabled since it's the only mode
     this.currentWall = null; // Current wall being drawn
-    this.wallBrushSize = 4; // Wall brush size in pixels (halved from 8px to 4px)
+    this.wallBrushSize = 4; // Wall brush size in pixels
     this.wallColor = "#ffffff"; // Wall color (white)
     this.lastDrawPoint = null; // Last point where brush was drawn
-    this.minDrawDistance = 2; // Significantly reduced for continuous walls
-    this.eraserMode = false; // Track if we're in eraser mode
-    this.spawnBoidMode = false; // Track if we're in boid spawning mode
-    this.predatorMode = false; // Track if we're spawning predator boids
+    this.minDrawDistance = 2; // For continuous walls
     this.eraserSize = this.wallBrushSize * 3; // Size of eraser relative to brush size
 
-    // Set cursor to crosshair by default since drawing is always enabled
+    // Set cursor to crosshair by default
     this.canvas.style.cursor = "crosshair";
 
     // Audio system initialization
@@ -60,8 +66,6 @@ class Simulation {
     this.audioEnabled = false; // Keep audio off by default
     this.audioTriggerCount = 0;
     this.audioTriggerInterval = 8; // Trigger sound every N frames
-
-    // Note: AudioContext will be initialized only when audio toggle button is clicked
 
     // Add time tracking variables for frame-rate independence
     this.lastTime = 0;
@@ -75,8 +79,8 @@ class Simulation {
     // Create initial boids (now 0 by default)
     this.initBoids(this.config.boidCount);
 
-    // Set up wall drawing event listeners
-    this.setupWallDrawing();
+    // Set up drawing event listeners
+    this.setupDrawing();
 
     // Add cursor tracking listener
     this.setupCursorTracking();
@@ -255,223 +259,231 @@ class Simulation {
     return { x, y };
   }
 
-  // Setup wall drawing event listeners
-  setupWallDrawing() {
+  getCursorMode() {
+    return this.cursorMode;
+  }
+
+  // Setup drawing event listeners
+  setupDrawing() {
     // MOUSE EVENTS
     this.canvas.addEventListener("mousedown", (e) => {
-      if (!this.drawingWalls) return;
-
       const coords = this.getCanvasCoordinates(e);
 
-      if (this.eraserMode) {
-        // In eraser mode, we immediately erase at this point
-        this.eraseWallsAt(coords.x, coords.y);
-      } else if (this.spawnBoidMode) {
-        // In spawn boid mode, create a new boid
-        this.spawnBoid(coords.x, coords.y);
-      } else {
-        // In draw mode, start a new wall
-        this.currentWall = [];
-        this.lastDrawPoint = coords;
-
-        // Add first point
-        this.addWallPoint(coords.x, coords.y);
+      switch (this.cursorMode) {
+        case this.CURSOR_MODES.ERASER:
+          this.eraseWallsAt(coords.x, coords.y);
+          break;
+        case this.CURSOR_MODES.BOID:
+          this.spawnBoid(coords.x, coords.y);
+          break;
+        case this.CURSOR_MODES.WALL:
+          this.currentWall = [];
+          this.lastDrawPoint = coords;
+          this.addWallPoint(coords.x, coords.y);
+          break;
+        case this.CURSOR_MODES.PREDATOR:
+          this.spawnBoid(coords.x, coords.y, true);
+          break;
       }
     });
 
     this.canvas.addEventListener("mousemove", (e) => {
-      if (!this.drawingWalls) return;
-
       const coords = this.getCanvasCoordinates(e);
 
-      if (this.eraserMode) {
-        // Only erase if mouse is pressed (button is being held down)
-        if (e.buttons > 0) {
-          this.eraseWallsAt(coords.x, coords.y);
-        }
-      } else if (this.spawnBoidMode) {
-        // Only spawn boids if mouse is pressed and being dragged
-        if (e.buttons > 0) {
-          // Don't spawn boids too close together - limit by time
-          const now = Date.now();
-          if (!this.lastBoidSpawnTime || now - this.lastBoidSpawnTime > 100) {
-            this.spawnBoid(coords.x, coords.y);
-            this.lastBoidSpawnTime = now;
-          }
-        }
-      } else if (this.currentWall) {
-        // In draw mode, continue drawing the current wall
-        // Calculate distance from last point
-        const dx = coords.x - this.lastDrawPoint.x;
-        const dy = coords.y - this.lastDrawPoint.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+      if (e.buttons > 0) {
+        switch (this.cursorMode) {
+          case this.CURSOR_MODES.ERASER:
+            this.eraseWallsAt(coords.x, coords.y);
+            break;
+          case this.CURSOR_MODES.BOID:
+          case this.CURSOR_MODES.PREDATOR:
+            const now = Date.now();
+            if (!this.lastBoidSpawnTime || now - this.lastBoidSpawnTime > 100) {
+              this.spawnBoid(
+                coords.x,
+                coords.y,
+                this.cursorMode === this.CURSOR_MODES.PREDATOR
+              );
+              this.lastBoidSpawnTime = now;
+            }
+            break;
+          case this.CURSOR_MODES.WALL:
+            if (this.currentWall) {
+              const dx = coords.x - this.lastDrawPoint.x;
+              const dy = coords.y - this.lastDrawPoint.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Add points continuously for a solid wall
-        if (distance >= this.minDrawDistance) {
-          // For a continuous wall, always add intermediate points
-          const steps = Math.max(Math.ceil(distance / this.minDrawDistance), 1);
+              if (distance >= this.minDrawDistance) {
+                const steps = Math.max(
+                  Math.ceil(distance / this.minDrawDistance),
+                  1
+                );
 
-          for (let i = 1; i <= steps; i++) {
-            const ratio = i / steps;
-            const interpX = this.lastDrawPoint.x + dx * ratio;
-            const interpY = this.lastDrawPoint.y + dy * ratio;
-            this.addWallPoint(interpX, interpY);
-          }
+                for (let i = 1; i <= steps; i++) {
+                  const ratio = i / steps;
+                  const interpX = this.lastDrawPoint.x + dx * ratio;
+                  const interpY = this.lastDrawPoint.y + dy * ratio;
+                  this.addWallPoint(interpX, interpY);
+                }
 
-          this.lastDrawPoint = coords;
+                this.lastDrawPoint = coords;
+              }
+            }
+            break;
         }
       }
     });
 
     this.canvas.addEventListener("mouseup", () => {
-      if (!this.drawingWalls || !this.currentWall) return;
+      if (this.cursorMode === this.CURSOR_MODES.WALL && this.currentWall) {
+        if (this.currentWall.length > 1) {
+          this.walls.push(this.currentWall);
+          this.rebuildWallSpatialIndex();
+        }
 
-      // Finalize the wall - only keep if it has some points
-      if (this.currentWall.length > 1) {
-        this.walls.push(this.currentWall);
-        // Update the spatial index with the new wall
-        this.rebuildWallSpatialIndex();
+        this.currentWall = null;
+        this.lastDrawPoint = null;
+        this.wallNeedsUpdate = true;
       }
-
-      this.currentWall = null;
-      this.lastDrawPoint = null;
-      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
 
-    // Also handle mouse leaving canvas
     this.canvas.addEventListener("mouseleave", () => {
-      if (!this.drawingWalls || !this.currentWall) return;
+      if (this.cursorMode === this.CURSOR_MODES.WALL && this.currentWall) {
+        if (this.currentWall.length > 1) {
+          this.walls.push(this.currentWall);
+          this.rebuildWallSpatialIndex();
+        }
 
-      if (this.currentWall.length > 1) {
-        this.walls.push(this.currentWall);
-        // Update the spatial index with the new wall
-        this.rebuildWallSpatialIndex();
+        this.currentWall = null;
+        this.lastDrawPoint = null;
+        this.wallNeedsUpdate = true;
       }
-
-      this.currentWall = null;
-      this.lastDrawPoint = null;
-      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
 
     // TOUCH EVENTS for mobile support
     this.canvas.addEventListener("touchstart", (e) => {
-      // Prevent default to stop scrolling/zooming
       e.preventDefault();
 
-      if (!this.drawingWalls) return;
-
-      const touch = e.touches[0]; // Get first touch point
+      const touch = e.touches[0];
       const coords = this.getTouchCoordinates(touch);
 
-      if (this.eraserMode) {
-        this.eraseWallsAt(coords.x, coords.y);
-        // Save the last touch position for eraser interpolation
-        this.lastDrawPoint = coords;
-      } else if (this.spawnBoidMode) {
-        // In spawn boid mode, create a new boid
-        this.spawnBoid(coords.x, coords.y);
-      } else {
-        this.currentWall = [];
-        this.lastDrawPoint = coords;
-        this.addWallPoint(coords.x, coords.y);
+      switch (this.cursorMode) {
+        case this.CURSOR_MODES.ERASER:
+          this.eraseWallsAt(coords.x, coords.y);
+          this.lastDrawPoint = coords;
+          break;
+        case this.CURSOR_MODES.BOID:
+          this.spawnBoid(coords.x, coords.y);
+          break;
+        case this.CURSOR_MODES.WALL:
+          this.currentWall = [];
+          this.lastDrawPoint = coords;
+          this.addWallPoint(coords.x, coords.y);
+          break;
+        case this.CURSOR_MODES.PREDATOR:
+          this.spawnBoid(coords.x, coords.y, true);
+          break;
       }
     });
 
     this.canvas.addEventListener("touchmove", (e) => {
-      // Prevent default to stop scrolling/zooming
       e.preventDefault();
 
-      if (!this.drawingWalls) return;
-
-      const touch = e.touches[0]; // Get first touch point
+      const touch = e.touches[0];
       const coords = this.getTouchCoordinates(touch);
 
-      if (this.eraserMode) {
-        // Calculate distance from last point
-        if (!this.lastDrawPoint) {
-          this.lastDrawPoint = coords;
-        }
-
-        const dx = coords.x - this.lastDrawPoint.x;
-        const dy = coords.y - this.lastDrawPoint.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        // Add points continuously for erasing with interpolation
-        if (distance >= this.minDrawDistance) {
-          // For continuous erasing, add intermediate points
-          const steps = Math.max(Math.ceil(distance / this.minDrawDistance), 1);
-
-          for (let i = 1; i <= steps; i++) {
-            const ratio = i / steps;
-            const interpX = this.lastDrawPoint.x + dx * ratio;
-            const interpY = this.lastDrawPoint.y + dy * ratio;
-            this.eraseWallsAt(interpX, interpY);
+      switch (this.cursorMode) {
+        case this.CURSOR_MODES.ERASER:
+          if (!this.lastDrawPoint) {
+            this.lastDrawPoint = coords;
           }
 
-          this.lastDrawPoint = coords;
-        }
-      } else if (this.spawnBoidMode) {
-        // Spawn boids while touch is moving
-        const now = Date.now();
-        if (!this.lastBoidSpawnTime || now - this.lastBoidSpawnTime > 100) {
-          this.spawnBoid(coords.x, coords.y);
-          this.lastBoidSpawnTime = now;
-        }
-      } else if (this.currentWall) {
-        // Calculate distance from last point
-        const dx = coords.x - this.lastDrawPoint.x;
-        const dy = coords.y - this.lastDrawPoint.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+          const dx = coords.x - this.lastDrawPoint.x;
+          const dy = coords.y - this.lastDrawPoint.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Add points continuously for a solid wall
-        if (distance >= this.minDrawDistance) {
-          // For a continuous wall, always add intermediate points
-          const steps = Math.max(Math.ceil(distance / this.minDrawDistance), 1);
+          if (distance >= this.minDrawDistance) {
+            const steps = Math.max(
+              Math.ceil(distance / this.minDrawDistance),
+              1
+            );
 
-          for (let i = 1; i <= steps; i++) {
-            const ratio = i / steps;
-            const interpX = this.lastDrawPoint.x + dx * ratio;
-            const interpY = this.lastDrawPoint.y + dy * ratio;
-            this.addWallPoint(interpX, interpY);
+            for (let i = 1; i <= steps; i++) {
+              const ratio = i / steps;
+              const interpX = this.lastDrawPoint.x + dx * ratio;
+              const interpY = this.lastDrawPoint.y + dy * ratio;
+              this.eraseWallsAt(interpX, interpY);
+            }
+
+            this.lastDrawPoint = coords;
           }
+          break;
+        case this.CURSOR_MODES.BOID:
+        case this.CURSOR_MODES.PREDATOR:
+          const now = Date.now();
+          if (!this.lastBoidSpawnTime || now - this.lastBoidSpawnTime > 100) {
+            this.spawnBoid(
+              coords.x,
+              coords.y,
+              this.cursorMode === this.CURSOR_MODES.PREDATOR
+            );
+            this.lastBoidSpawnTime = now;
+          }
+          break;
+        case this.CURSOR_MODES.WALL:
+          if (this.currentWall) {
+            const dx = coords.x - this.lastDrawPoint.x;
+            const dy = coords.y - this.lastDrawPoint.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
-          this.lastDrawPoint = coords;
-        }
+            if (distance >= this.minDrawDistance) {
+              const steps = Math.max(
+                Math.ceil(distance / this.minDrawDistance),
+                1
+              );
+
+              for (let i = 1; i <= steps; i++) {
+                const ratio = i / steps;
+                const interpX = this.lastDrawPoint.x + dx * ratio;
+                const interpY = this.lastDrawPoint.y + dy * ratio;
+                this.addWallPoint(interpX, interpY);
+              }
+
+              this.lastDrawPoint = coords;
+            }
+          }
+          break;
       }
     });
 
     this.canvas.addEventListener("touchend", (e) => {
       e.preventDefault();
 
-      if (!this.drawingWalls) return;
+      if (this.cursorMode === this.CURSOR_MODES.WALL && this.currentWall) {
+        if (this.currentWall.length > 1) {
+          this.walls.push(this.currentWall);
+          this.rebuildWallSpatialIndex();
+        }
 
-      if (!this.eraserMode && this.currentWall && this.currentWall.length > 1) {
-        // Finalize the wall - only keep if it has some points
-        this.walls.push(this.currentWall);
-        // Update the spatial index with the new wall
-        this.rebuildWallSpatialIndex();
+        this.currentWall = null;
+        this.lastDrawPoint = null;
+        this.wallNeedsUpdate = true;
       }
-
-      this.currentWall = null;
-      this.lastDrawPoint = null;
-      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
 
     this.canvas.addEventListener("touchcancel", (e) => {
       e.preventDefault();
 
-      if (!this.drawingWalls) return;
+      if (this.cursorMode === this.CURSOR_MODES.WALL && this.currentWall) {
+        if (this.currentWall.length > 1) {
+          this.walls.push(this.currentWall);
+          this.rebuildWallSpatialIndex();
+        }
 
-      if (!this.eraserMode && this.currentWall && this.currentWall.length > 1) {
-        // Finalize the wall - only keep if it has some points
-        this.walls.push(this.currentWall);
-        // Update the spatial index with the new wall
-        this.rebuildWallSpatialIndex();
+        this.currentWall = null;
+        this.lastDrawPoint = null;
+        this.wallNeedsUpdate = true;
       }
-
-      this.currentWall = null;
-      this.lastDrawPoint = null;
-      this.wallNeedsUpdate = true; // Mark walls for redraw
     });
   }
 
@@ -524,105 +536,50 @@ class Simulation {
     this.wallNeedsUpdate = true;
   }
 
-  // Toggle wall drawing mode
-  toggleWallDrawing() {
-    this.drawingWalls = !this.drawingWalls;
-    // Change cursor style based on mode
-    this.canvas.style.cursor = this.drawingWalls ? "crosshair" : "default";
-    return this.drawingWalls;
-  }
-
-  // Toggle eraser mode
-  toggleEraserMode() {
-    this.eraserMode = !this.eraserMode;
-
-    // Exit spawn boid mode if it was active
-    if (this.eraserMode && this.spawnBoidMode) {
-      this.spawnBoidMode = false;
-    }
-
-    // Update cursor based on mode
-    this.updateCursor();
-
-    return this.eraserMode;
-  }
-
-  // Toggle boid spawner mode
-  toggleBoidSpawner() {
-    this.spawnBoidMode = !this.spawnBoidMode;
-
-    // Exit eraser mode if it was active
-    if (this.spawnBoidMode && this.eraserMode) {
-      this.eraserMode = false;
-    }
-
-    // Reset predator mode when toggling spawner off
-    if (!this.spawnBoidMode) {
-      this.predatorMode = false;
-    }
-
-    // Update cursor based on mode
-    this.updateCursor();
-
-    return this.spawnBoidMode;
-  }
-
-  // Toggle between normal and predator boid types
-  togglePredatorMode() {
-    // Only toggle if we're in spawn mode
-    if (this.spawnBoidMode) {
-      this.predatorMode = !this.predatorMode;
-
-      // Update cursor to reflect the current mode
+  // Toggle cursor mode
+  setCursorMode(mode) {
+    if (Object.values(this.CURSOR_MODES).includes(mode)) {
+      this.cursorMode = mode;
       this.updateCursor();
-
-      return this.predatorMode;
     }
-    return false;
   }
 
   // Update cursor appearance based on current mode
   updateCursor() {
-    if (this.eraserMode) {
-      this.canvas.style.cursor =
-        'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff000055"/></svg>\') 12 12, auto';
-    } else if (this.spawnBoidMode) {
-      if (this.predatorMode) {
-        // Predator boid cursor (red color)
+    switch (this.cursorMode) {
+      case this.CURSOR_MODES.ERASER:
         this.canvas.style.cursor =
-          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ff000055"/><circle cx="12" cy="12" r="4" fill="%23ff0000aa"/></svg>\') 12 12, auto';
-      } else {
-        // Normal boid cursor (green color)
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff000055"/></svg>\') 12 12, auto';
+        break;
+      case this.CURSOR_MODES.BOID:
         this.canvas.style.cursor =
           'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%2300ff0055"/><circle cx="12" cy="12" r="4" fill="%2300ff00aa"/></svg>\') 12 12, auto';
-      }
-    } else {
-      this.canvas.style.cursor = "crosshair";
+        break;
+      case this.CURSOR_MODES.PREDATOR:
+        this.canvas.style.cursor =
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ff000055"/><circle cx="12" cy="12" r="4" fill="%23ff0000aa"/></svg>\') 12 12, auto';
+        break;
+      case this.CURSOR_MODES.WALL:
+      default:
+        this.canvas.style.cursor = "crosshair";
+        break;
     }
   }
 
   // Spawn a new boid at the given coordinates
-  spawnBoid(x, y) {
-    if (this.spawnBoidMode) {
-      // Create a new boid at the specified position
-      const newBoid = new Boid(x, y, this.canvas);
+  spawnBoid(x, y, isPredator = false) {
+    const newBoid = new Boid(x, y, this.canvas);
 
-      // If in predator mode, mark this boid as a predator (for future implementation)
-      if (this.predatorMode) {
-        newBoid.isPredator = true;
-      }
-
-      // Add some initial velocity in a random direction
-      const angle = Math.random() * Math.PI * 2;
-      newBoid.velocity.x = Math.cos(angle) * newBoid.maxSpeed * 0.5;
-      newBoid.velocity.y = Math.sin(angle) * newBoid.maxSpeed * 0.5;
-
-      // Add the new boid to the simulation
-      this.boids.push(newBoid);
-
-      // Force the boid to update once to ensure it's properly initialized
-      newBoid.update(1.0);
+    if (isPredator) {
+      newBoid.isPredator = true;
     }
+
+    const angle = Math.random() * Math.PI * 2;
+    newBoid.velocity.x = Math.cos(angle) * newBoid.maxSpeed * 0.5;
+    newBoid.velocity.y = Math.sin(angle) * newBoid.maxSpeed * 0.5;
+
+    this.boids.push(newBoid);
+    newBoid.update(1.0);
   }
 
   // Erase wall points and boids at the given coordinates
@@ -666,8 +623,6 @@ class Simulation {
 
   // Remove boids within the specified radius
   eraseBoids(x, y, radiusSquared) {
-    if (!this.eraserMode) return false;
-
     const originalLength = this.boids.length;
 
     // Store boid positions before removal to use for death sound
@@ -1082,7 +1037,7 @@ class Simulation {
       }
 
       // Draw current wall being drawn
-      if (this.drawingWalls && this.currentWall) {
+      if (this.cursorMode === this.CURSOR_MODES.WALL && this.currentWall) {
         this.drawWallSegment(this.wallCtx, this.currentWall);
       }
 
