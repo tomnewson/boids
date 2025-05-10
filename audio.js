@@ -20,7 +20,7 @@ class AudioEngine {
     this.lastNoteTriggers = {};
     this.noteThrottle = 200; // Minimum ms between notes from the same source
     this.lastDeathSoundTime = 0; // Track when we last played a death sound
-    this.deathSoundThrottle = 0; // Minimum ms between death sounds
+    this.deathSoundThrottle = 100; // Minimum ms between death sounds
 
     // Add visibility change listener to handle tab switching
     document.addEventListener(

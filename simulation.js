@@ -176,10 +176,46 @@ class Simulation {
   // Create initial boids
   initBoids(count) {
     this.boids = [];
-    for (let i = 0; i < count; i++) {
+
+    // Define predator ratio - around 15% of boids should be predators
+    const predatorRatio = 0.15;
+    const predatorCount = Math.round(count * predatorRatio);
+    const preyCount = count - predatorCount;
+
+    // Create prey boids
+    for (let i = 0; i < preyCount; i++) {
       const x = Math.random() * this.canvas.width;
       const y = Math.random() * this.canvas.height;
-      this.boids.push(new Boid(x, y, this.canvas));
+      const boid = new Boid(x, y, this.canvas);
+
+      // Set prey properties
+      boid.isPredator = false;
+      boid.maxSpeed = PREY_MAX_SPEED;
+      boid.steeringFactor = PREY_STEERING_FACTOR;
+
+      this.boids.push(boid);
+    }
+
+    // Create predator boids
+    for (let i = 0; i < predatorCount; i++) {
+      const x = Math.random() * this.canvas.width;
+      const y = Math.random() * this.canvas.height;
+      const boid = new Boid(x, y, this.canvas);
+
+      // Set predator properties
+      boid.isPredator = true;
+      boid.health = 80;
+      boid.maxHealth = 150;
+      boid.healthDecayRate = 0.12;
+      boid.reproductionThreshold = 120;
+      boid.reproductionCost = 60;
+      boid.foodGenerationRate = 0;
+
+      // Make predators faster but with slower turning
+      boid.maxSpeed = PREDATOR_MAX_SPEED;
+      boid.steeringFactor = PREDATOR_STEERING_FACTOR;
+
+      this.boids.push(boid);
     }
   }
 
@@ -571,7 +607,23 @@ class Simulation {
     const newBoid = new Boid(x, y, this.canvas);
 
     if (isPredator) {
+      // Set predator properties
       newBoid.isPredator = true;
+      newBoid.health = 80;
+      newBoid.maxHealth = 150;
+      newBoid.healthDecayRate = 0.12;
+      newBoid.reproductionThreshold = 120;
+      newBoid.reproductionCost = 60;
+      newBoid.foodGenerationRate = 0;
+
+      // Make predators faster but with slower turning
+      newBoid.maxSpeed = PREDATOR_MAX_SPEED;
+      newBoid.steeringFactor = PREDATOR_STEERING_FACTOR;
+    } else {
+      // Set prey properties
+      newBoid.isPredator = false;
+      newBoid.maxSpeed = PREY_MAX_SPEED;
+      newBoid.steeringFactor = PREY_STEERING_FACTOR;
     }
 
     const angle = Math.random() * Math.PI * 2;
@@ -949,6 +1001,9 @@ class Simulation {
     // Track boids that have been killed by predators
     const killedBoids = [];
 
+    // Track new boids created through reproduction
+    const newBoids = [];
+
     for (const boid of this.boids) {
       // Always apply cursor avoidance first if the method exists
       if (typeof boid.avoidCursor === "function") {
@@ -974,9 +1029,17 @@ class Simulation {
       // Update boid position and apply true collision detection
       boid.update(timeScale);
 
-      // Check if this boid has been killed by a predator
+      // Check if this boid has been killed
       if (boid.killed) {
         killedBoids.push(boid);
+      }
+
+      // Check for reproduction - if ready, create a new boid
+      if (boid.readyToReproduce) {
+        const offspring = boid.reproduce();
+        if (offspring) {
+          newBoids.push(offspring);
+        }
       }
     }
 
@@ -1002,6 +1065,27 @@ class Simulation {
       this.boids = this.boids.filter((boid) => !boid.killed);
     }
 
+    // Add any new boids created through reproduction
+    if (newBoids.length > 0) {
+      // Optional: Add a sound for reproduction events if audio is enabled
+      if (
+        this.audioEnabled &&
+        this.audioEngine._initialized &&
+        newBoids.length > 0
+      ) {
+        // Just play one birth sound even if multiple births happened
+        const newBoid = newBoids[0];
+        // Use a different sound for births if available, or reuse another sound
+        // this.audioEngine.playBirthSound(newBoid.position.x, newBoid.position.y, this.canvas.width, this.canvas.height);
+      }
+
+      // Add the new boids to the simulation
+      this.boids = this.boids.concat(newBoids);
+    }
+
+    // Apply population controls
+    this.applyPopulationControls();
+
     // Process audio if enabled
     if (this.audioEnabled) {
       this.audioTriggerCount++;
@@ -1012,6 +1096,124 @@ class Simulation {
           this.audioTriggerCount
         );
       }
+    }
+  }
+
+  // Population control system - maintains balance in the ecosystem
+  applyPopulationControls() {
+    const maxBoids = 300; // Hard upper limit on total boids
+    const minPreyRatio = 0.6; // Minimum percentage of prey (60%)
+    const maxPredatorRatio = 0.3; // Maximum percentage of predators (30%)
+    const minPredators = 3; // Always keep a few predators
+
+    // Count current populations
+    let predatorCount = 0;
+    let preyCount = 0;
+
+    for (const boid of this.boids) {
+      if (boid.isPredator) {
+        predatorCount++;
+      } else {
+        preyCount++;
+      }
+    }
+
+    const totalBoids = predatorCount + preyCount;
+
+    // Check for overpopulation
+    if (totalBoids > maxBoids) {
+      // Remove excess boids
+      const excessBoids = totalBoids - maxBoids;
+      const killedPrey = [];
+      const killedPredators = [];
+
+      // Calculate current ratios
+      const currentPredatorRatio = predatorCount / totalBoids;
+      const currentPreyRatio = preyCount / totalBoids;
+
+      // Determine if we should remove predators or prey or both
+      let predatorsToRemove = 0;
+      let preyToRemove = 0;
+
+      if (currentPredatorRatio > maxPredatorRatio) {
+        // Too many predators, remove more predators
+        predatorsToRemove = Math.min(
+          excessBoids,
+          predatorCount -
+            Math.max(minPredators, Math.floor(totalBoids * maxPredatorRatio))
+        );
+        preyToRemove = excessBoids - predatorsToRemove;
+      } else if (
+        currentPreyRatio < minPreyRatio &&
+        predatorCount > minPredators
+      ) {
+        // Too few prey, remove more predators to restore balance
+        predatorsToRemove = Math.min(excessBoids, predatorCount - minPredators);
+        preyToRemove = excessBoids - predatorsToRemove;
+      } else {
+        // Remove proportionally
+        predatorsToRemove = Math.min(
+          Math.floor(excessBoids * currentPredatorRatio),
+          predatorCount - minPredators
+        );
+        preyToRemove = excessBoids - predatorsToRemove;
+      }
+
+      // Remove predators (oldest/weakest first)
+      if (predatorsToRemove > 0) {
+        // Sort by health, remove weakest first
+        const predators = this.boids
+          .filter((b) => b.isPredator)
+          .sort((a, b) => a.health - b.health);
+
+        for (let i = 0; i < predatorsToRemove && i < predators.length; i++) {
+          predators[i].killed = true;
+          killedPredators.push(predators[i]);
+        }
+      }
+
+      // Remove prey (oldest/weakest first)
+      if (preyToRemove > 0) {
+        // Sort by health, remove weakest first
+        const prey = this.boids
+          .filter((b) => !b.isPredator)
+          .sort((a, b) => a.health - b.health);
+
+        for (let i = 0; i < preyToRemove && i < prey.length; i++) {
+          prey[i].killed = true;
+          killedPrey.push(prey[i]);
+        }
+      }
+
+      // Play death sounds for a sample of the killed boids if audio is enabled
+      if (this.audioEnabled && this.audioEngine._initialized) {
+        const maxSounds = 2;
+
+        // Play sound for a killed predator if any
+        if (killedPredators.length > 0) {
+          const predator = killedPredators[0];
+          this.audioEngine.playDeathSound(
+            predator.position.x,
+            predator.position.y,
+            this.canvas.width,
+            this.canvas.height
+          );
+        }
+
+        // Play sound for a killed prey if any
+        if (killedPrey.length > 0) {
+          const prey = killedPrey[0];
+          this.audioEngine.playDeathSound(
+            prey.position.x,
+            prey.position.y,
+            this.canvas.width,
+            this.canvas.height
+          );
+        }
+      }
+
+      // Remove killed boids
+      this.boids = this.boids.filter((boid) => !boid.killed);
     }
   }
 

@@ -1,3 +1,9 @@
+// Movement characteristic constants
+const PREY_STEERING_FACTOR = 1.6; // Higher value means prey turn more quickly
+const PREDATOR_STEERING_FACTOR = 0.9; // Improved from 0.7 - still slower than prey but better hunting ability
+const PREY_MAX_SPEED = 3.2; // Slightly lower max speed for prey
+const PREDATOR_MAX_SPEED = 4.5; // Higher max speed for predators
+
 class Boid {
   constructor(x, y, canvas) {
     this.id = Math.random().toString(36).substring(2, 15); // Add unique ID
@@ -52,6 +58,25 @@ class Boid {
     this.predatorChaseStrength = 1.2; // How strongly predators chase prey
     this.predatorFleeStrength = 2.0; // How strongly prey flee from predators
     this.huntingCooldown = 0; // Cooldown timer for predator kills
+
+    // Add turning agility factor - prey turn faster than predators
+    this.steeringFactor = 1.0; // Base steering factor, will be adjusted based on predator status
+
+    // Predator/Prey system - health and reproduction
+    this.health = this.isPredator ? 80 : 75; // Prey start with slightly higher health (was 70)
+    this.maxHealth = this.isPredator ? 150 : 100; // Predators have higher max health
+    this.healthDecayRate = this.isPredator ? 0.12 : 0.03; // Reduce prey decay rate (was 0.05)
+    this.killed = false; // Flag to mark if this boid is killed
+
+    // Reproduction properties
+    this.reproductionThreshold = this.isPredator ? 120 : 85; // Lower prey threshold (was 90)
+    this.reproductionCost = this.isPredator ? 60 : 50; // Lower prey reproduction cost (was 60)
+    this.reproductionCooldown = this.isPredator ? 0 : 100; // Shorter initial cooldown for prey (was 120)
+    this.readyToReproduce = false; // Flag to indicate reproductive readiness
+
+    // Food properties
+    this.healthGainPerKill = 45; // Health gained when predator kills prey
+    this.foodGenerationRate = this.isPredator ? 0 : 0.04; // Increase prey health gain rate (was 0.01)
   }
 
   // Update boid's position based on its velocity and acceleration
@@ -117,6 +142,105 @@ class Boid {
     if (this.huntingCooldown > 0) {
       this.huntingCooldown -= timeScale;
     }
+
+    // Decrement reproduction cooldown if it exists
+    if (this.reproductionCooldown > 0) {
+      this.reproductionCooldown -= timeScale;
+    }
+
+    // Process health mechanics - decay and food
+    this.updateHealth(timeScale);
+
+    // Check for reproduction possibility
+    this.checkReproduction();
+  }
+
+  // Update boid health - handles health decay and food generation
+  updateHealth(timeScale) {
+    // Apply health decay over time
+    this.health -= this.healthDecayRate * timeScale;
+
+    // Prey slowly generate health by "grazing"
+    if (!this.isPredator) {
+      this.health += this.foodGenerationRate * timeScale;
+    }
+
+    // Cap health at maximum
+    if (this.health > this.maxHealth) {
+      this.health = this.maxHealth;
+    }
+
+    // Mark as dead if health reaches zero
+    if (this.health <= 0) {
+      this.killed = true;
+    }
+  }
+
+  // Check if the boid can reproduce
+  checkReproduction() {
+    // Only reproduce if:
+    // 1. Not on cooldown
+    // 2. Has enough health
+    // 3. Not already marked as ready to reproduce
+    if (
+      this.reproductionCooldown <= 0 &&
+      this.health >= this.reproductionThreshold &&
+      !this.readyToReproduce
+    ) {
+      this.readyToReproduce = true;
+    } else if (this.health < this.reproductionThreshold) {
+      this.readyToReproduce = false;
+    }
+  }
+
+  // Handle reproduction - creates a new boid
+  reproduce() {
+    // Can only reproduce if ready flag is set
+    if (!this.readyToReproduce) {
+      return null;
+    }
+
+    // Deduct reproduction cost from health
+    this.health -= this.reproductionCost;
+
+    // Reset reproduction flag and start cooldown
+    this.readyToReproduce = false;
+    this.reproductionCooldown = this.isPredator ? 300 : 150; // Predators have longer cooldown
+
+    // Create a new boid of the same type at a slightly offset position
+    const offsetX = (Math.random() - 0.5) * 10;
+    const offsetY = (Math.random() - 0.5) * 10;
+
+    // Initialize offspring
+    const offspring = new Boid(
+      this.position.x + offsetX,
+      this.position.y + offsetY,
+      this.canvas
+    );
+
+    // Child inherits parent's predator status
+    offspring.isPredator = this.isPredator;
+
+    // Update properties based on predator status
+    if (offspring.isPredator) {
+      offspring.health = 80;
+      offspring.maxHealth = 150;
+      offspring.healthDecayRate = 0.12;
+      offspring.reproductionThreshold = 120;
+      offspring.reproductionCost = 60;
+      offspring.foodGenerationRate = 0;
+
+      // Inherit predator movement characteristics
+      offspring.maxSpeed = PREDATOR_MAX_SPEED; // Higher max speed for predators
+      offspring.steeringFactor = PREDATOR_STEERING_FACTOR; // Lower steering factor for predators (turn more slowly)
+    } else {
+      // Inherit prey movement characteristics
+      offspring.maxSpeed = PREY_MAX_SPEED; // Slightly lower max speed for prey
+      offspring.steeringFactor = PREY_STEERING_FACTOR; // Higher steering factor for prey (turn more quickly)
+    }
+
+    // Return the new boid to be added to the simulation
+    return offspring;
   }
 
   // Check for wall collisions and handle them
@@ -210,9 +334,14 @@ class Boid {
 
   // Apply force to boid's acceleration with smoothing
   applyForce(force) {
+    // Apply steering factor based on predator/prey status
+    // Predators turn more slowly (lower steering factor)
+    const steeringMultiplier = this.steeringFactor;
+
     // Apply force with gradual influence based on current acceleration
-    this.acceleration.x += force.x;
-    this.acceleration.y += force.y;
+    // and adjusted by the steering factor
+    this.acceleration.x += force.x * steeringMultiplier;
+    this.acceleration.y += force.y * steeringMultiplier;
   }
 
   // Calculate separation force - steer to avoid crowding local flockmates
@@ -716,6 +845,14 @@ class Boid {
     if (distSquared <= collisionRadiusSq) {
       prey.killed = true;
 
+      // Predator gains health from killing prey
+      this.health += this.healthGainPerKill;
+
+      // Cap health at maximum
+      if (this.health > this.maxHealth) {
+        this.health = this.maxHealth;
+      }
+
       // Add cooldown to prevent immediate chasing of next prey
       this.huntingCooldown = 30; // frames cooldown
 
@@ -727,6 +864,9 @@ class Boid {
 
   // Calculate color based on boid properties
   getColor() {
+    // Calculate health percentage for visual indicator
+    const healthPercentage = this.health / this.maxHealth;
+
     // Predator boids use a red hue
     if (this.isPredator) {
       // Calculate current speed for saturation
@@ -743,14 +883,14 @@ class Boid {
       // Calculate saturation based on speed
       const saturation = 70 + normalizedSpeed * 30;
 
-      // Calculate lightness based on height
-      const normalizedHeight = this.position.y / this.canvas.height;
-      const lightness = 40 + (1 - normalizedHeight) * 30;
+      // Calculate lightness - use health percentage to impact lightness
+      // Healthy predators are bright, dying ones are dark
+      const baseLight = 40 + (1 - this.position.y / this.canvas.height) * 30;
+      const lightness = healthPercentage * baseLight;
 
       return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     } else {
-      // Normal boid color calculation (unchanged)
-      // Calculate current speed
+      // Normal boid color calculation with health indicator
       const speed = Math.sqrt(
         this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
       );
@@ -758,19 +898,17 @@ class Boid {
       // Normalize speed (0 to 1)
       const normalizedSpeed = Math.min(speed / this.maxSpeed, 1.0);
 
-      // Calculate saturation based on speed (faster = more saturated)
-      // Changed from 50-100% to 30-70% for lower saturation values
+      // Calculate saturation based on speed
       const saturation = 30 + normalizedSpeed * 40;
 
-      // Calculate lightness based on height (higher = brighter)
-      const normalizedHeight = this.position.y / this.canvas.height;
-      const lightness = 30 + (1 - normalizedHeight) * 50; // Higher boids (lower y values) are brighter (30% to 80%)
-
       // Apply a subtle hue shift based on horizontal position
-      // This keeps the base hue but adds a slight shift (-10 to +10 degrees)
       const normalizedX = this.position.x / this.canvas.width;
       const hueShift = (normalizedX - 0.5) * 20; // -10 to +10 degree shift
-      const adjustedHue = (this.hue + hueShift + 360) % 360; // Ensure it stays in 0-359 range
+      const adjustedHue = (this.hue + hueShift + 360) % 360;
+
+      // Health affects lightness - low health boids are darker
+      const baseLight = 30 + (1 - this.position.y / this.canvas.height) * 50;
+      const lightness = healthPercentage * baseLight;
 
       // Return the final HSL color
       return `hsl(${adjustedHue}, ${saturation}%, ${lightness}%)`;
@@ -837,6 +975,24 @@ class Boid {
     }
     ctx.lineJoin = "round";
     ctx.stroke();
+
+    // Add indicator for reproduction readiness
+    if (this.readyToReproduce) {
+      // Draw a glowing circle around the boid to indicate it's ready to reproduce
+      ctx.beginPath();
+
+      // Color based on predator status
+      if (this.isPredator) {
+        ctx.fillStyle = "rgba(255, 120, 120, 0.4)"; // Soft red glow for predators
+      } else {
+        ctx.fillStyle = "rgba(150, 255, 150, 0.4)"; // Soft green glow for prey
+      }
+
+      // Draw circle slightly larger than the boid
+      const glowRadius = this.size * 2.5 * sizeMultiplier;
+      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Restore the context state
     ctx.restore();
