@@ -152,7 +152,10 @@ class AudioEngine {
   }
 
   // Play a blood-curdling cry when a boid is killed
-  playDeathSound(x, y, canvasWidth, canvasHeight) {
+  playDeathSound(x, y, canvasWidth, canvasHeight, cause = "unknown") {
+    // Only play sound for predator or player kills
+    if (cause !== "predator" && cause !== "player") return;
+
     if (!this._initialized || !this._audioContext) return;
 
     // Throttle death sounds to prevent audio overload

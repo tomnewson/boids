@@ -248,7 +248,8 @@ class Simulation {
             boid.position.x,
             boid.position.y,
             canvasWidth,
-            canvasHeight
+            canvasHeight,
+            "player" // Add death cause: player reset the simulation
           );
         }, index * 60); // 60ms delay between each sound
       });
@@ -720,7 +721,8 @@ class Simulation {
           boid.x,
           boid.y,
           this.canvas.width,
-          this.canvas.height
+          this.canvas.height,
+          "player" // Add death cause: player killed these boids with eraser
         );
       }
     }
@@ -1056,7 +1058,8 @@ class Simulation {
             boid.position.x,
             boid.position.y,
             this.canvas.width,
-            this.canvas.height
+            this.canvas.height,
+            "predator" // Add death cause: these boids were killed by predators
           );
         }
       }
@@ -1101,7 +1104,7 @@ class Simulation {
 
   // Population control system - maintains balance in the ecosystem
   applyPopulationControls() {
-    const maxBoids = 300; // Hard upper limit on total boids
+    const maxBoids = 500; // Hard upper limit on total boids
     const minPreyRatio = 0.6; // Minimum percentage of prey (60%)
     const maxPredatorRatio = 0.3; // Maximum percentage of predators (30%)
     const minPredators = 3; // Always keep a few predators
@@ -1186,6 +1189,8 @@ class Simulation {
       }
 
       // Play death sounds for a sample of the killed boids if audio is enabled
+      // Removed death sounds for population control as requested
+      /*
       if (this.audioEnabled && this.audioEngine._initialized) {
         const maxSounds = 2;
 
@@ -1211,6 +1216,7 @@ class Simulation {
           );
         }
       }
+      */
 
       // Remove killed boids
       this.boids = this.boids.filter((boid) => !boid.killed);
