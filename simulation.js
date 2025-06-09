@@ -586,15 +586,15 @@ class Simulation {
     switch (this.cursorMode) {
       case this.CURSOR_MODES.ERASER:
         this.canvas.style.cursor =
-          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff000055"/></svg>\') 12 12, auto';
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ff0000" fill-opacity="0.6"/></svg>\') 12 12, auto';
         break;
       case this.CURSOR_MODES.BOID:
         this.canvas.style.cursor =
-          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%2300ff0055"/><circle cx="12" cy="12" r="4" fill="%2300ff00aa"/></svg>\') 12 12, auto';
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%2300ff00" fill-opacity="0.333"/><circle cx="12" cy="12" r="4" fill="%2300ff00" fill-opacity="0.667"/></svg>\') 12 12, auto';
         break;
       case this.CURSOR_MODES.PREDATOR:
         this.canvas.style.cursor =
-          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ff000055"/><circle cx="12" cy="12" r="4" fill="%23ff0000aa"/></svg>\') 12 12, auto';
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ff0000" fill-opacity="0.333"/><circle cx="12" cy="12" r="4" fill="%23ff0000" fill-opacity="0.667"/></svg>\') 12 12, auto';
         break;
       case this.CURSOR_MODES.WALL:
       default:
