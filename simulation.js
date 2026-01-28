@@ -1375,16 +1375,25 @@ class Simulation {
 
     // Draw food items
     for (const food of this.food) {
-      this.ctx.fillStyle = food.color;
-      this.ctx.beginPath();
-      this.ctx.arc(food.position.x, food.position.y, food.size, 0, Math.PI * 2);
-      this.ctx.fill();
-      
-      // Add a subtle glow effect
+      // Draw glow effect (larger square behind)
       this.ctx.fillStyle = food.glowColor;
-      this.ctx.beginPath();
-      this.ctx.arc(food.position.x, food.position.y, food.size * 2, 0, Math.PI * 2);
-      this.ctx.fill();
+      const glowSize = food.size * 4; // 2x diameter for glow
+      this.ctx.fillRect(
+        food.position.x - glowSize / 2,
+        food.position.y - glowSize / 2,
+        glowSize,
+        glowSize
+      );
+      
+      // Draw main food square
+      this.ctx.fillStyle = food.color;
+      const foodSize = food.size * 2; // diameter as square size
+      this.ctx.fillRect(
+        food.position.x - foodSize / 2,
+        food.position.y - foodSize / 2,
+        foodSize,
+        foodSize
+      );
     }
 
     // Draw each boid, passing the full boids array for neighbor awareness
