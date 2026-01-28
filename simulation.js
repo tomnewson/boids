@@ -689,11 +689,13 @@ class Simulation {
 
   // Spawn a new food item at the given coordinates
   spawnFood(x, y) {
+    const color = this.generatePastelColor(); // Random pastel color
     const newFood = {
       position: { x: x, y: y },
       size: 4, // Visual size of food
       nutritionValue: 30, // Health boost when consumed
-      color: this.generatePastelColor(), // Random pastel color
+      color: color,
+      glowColor: this.generateGlowColor(color), // Pre-compute glow color
     };
     this.food.push(newFood);
   }
@@ -1361,7 +1363,7 @@ class Simulation {
       this.ctx.fill();
       
       // Add a subtle glow effect
-      this.ctx.fillStyle = this.generateGlowColor(food.color);
+      this.ctx.fillStyle = food.glowColor;
       this.ctx.beginPath();
       this.ctx.arc(food.position.x, food.position.y, food.size * 2, 0, Math.PI * 2);
       this.ctx.fill();
