@@ -664,25 +664,26 @@ class Simulation {
     newBoid.update(1.0);
   }
 
-  // Generate a random pastel color
-  generatePastelColor() {
-    // Generate more saturated pastel colors by varying RGB components more
+  // Generate a random saturated color
+  generateSaturatedColor() {
+    // Generate saturated colors by varying RGB components significantly
     // One or two components will be high (200-255) while others can be lower (100-255)
+    // This creates vibrant colors with strong hues
     const hue = Math.random();
     let r, g, b;
     
     if (hue < 0.33) {
-      // Red-ish pastels
+      // Red-dominant vibrant colors
       r = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
       g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
       b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
     } else if (hue < 0.66) {
-      // Green-ish pastels
+      // Green-dominant vibrant colors
       r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
       g = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
       b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
     } else {
-      // Blue-ish pastels
+      // Blue-dominant vibrant colors
       r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
       g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
       b = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
@@ -691,7 +692,7 @@ class Simulation {
     return `rgba(${r}, ${g}, ${b}, 0.8)`;
   }
 
-  // Generate a glow color for the pastel food
+  // Generate a glow color for the food
   generateGlowColor(baseColor) {
     // Extract RGB values from the base color
     const match = baseColor.match(/rgba\((\d+), (\d+), (\d+), [\d.]+\)/);
@@ -706,7 +707,7 @@ class Simulation {
 
   // Spawn a new food item at the given coordinates
   spawnFood(x, y) {
-    const color = this.generatePastelColor(); // Random pastel color
+    const color = this.generateSaturatedColor(); // Random saturated color
     const newFood = {
       position: { x: x, y: y },
       size: 4, // Visual size of food
