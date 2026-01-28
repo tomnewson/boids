@@ -666,11 +666,28 @@ class Simulation {
 
   // Generate a random pastel color
   generatePastelColor() {
-    // Generate pastel colors by using high values (200-255) for RGB components
-    // with some randomness to create soft, light colors
-    const r = Math.floor(Math.random() * 56) + 200; // 200-255
-    const g = Math.floor(Math.random() * 56) + 200; // 200-255
-    const b = Math.floor(Math.random() * 56) + 200; // 200-255
+    // Generate more saturated pastel colors by varying RGB components more
+    // One or two components will be high (200-255) while others can be lower (100-255)
+    const hue = Math.random();
+    let r, g, b;
+    
+    if (hue < 0.33) {
+      // Red-ish pastels
+      r = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+      g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+    } else if (hue < 0.66) {
+      // Green-ish pastels
+      r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      g = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+      b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+    } else {
+      // Blue-ish pastels
+      r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      b = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+    }
+    
     return `rgba(${r}, ${g}, ${b}, 0.8)`;
   }
 
