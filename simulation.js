@@ -257,6 +257,9 @@ class Simulation {
       });
     }
 
+    // Clear food items
+    this.food = [];
+
     // Create new boids
     this.initBoids(this.config.boidCount);
   }
@@ -707,7 +710,10 @@ class Simulation {
     // Also remove any boids within the eraser radius
     const boidsRemoved = this.eraseBoids(x, y, eraseRadiusSquared);
 
-    return wallsModified || boidsRemoved;
+    // Also remove any food within the eraser radius
+    const foodRemoved = this.eraseFood(x, y, eraseRadiusSquared);
+
+    return wallsModified || boidsRemoved || foodRemoved;
   }
 
   // Remove boids within the specified radius
@@ -765,6 +771,24 @@ class Simulation {
 
     // Return true if any boids were removed
     return this.boids.length < originalLength;
+  }
+
+  // Remove food within the specified radius
+  eraseFood(x, y, radiusSquared) {
+    const originalLength = this.food.length;
+
+    // Filter out food that are within the eraser radius
+    this.food = this.food.filter((food) => {
+      const dx = food.position.x - x;
+      const dy = food.position.y - y;
+      const distSquared = dx * dx + dy * dy;
+
+      // Keep food that are outside the eraser radius
+      return distSquared > radiusSquared;
+    });
+
+    // Return true if any food was removed
+    return this.food.length < originalLength;
   }
 
   // Clear all walls
