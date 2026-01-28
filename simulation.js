@@ -22,12 +22,14 @@ class Simulation {
       ERASER: "ERASER",
       BOID: "BOID",
       PREDATOR: "PREDATOR",
+      FOOD: "FOOD",
     };
 
     // Current cursor mode (default to WALL)
     this.cursorMode = this.CURSOR_MODES.WALL;
 
     this.boids = [];
+    this.food = []; // Array to store food items
     this.running = true;
     this.separationFactor = 1.5;
     this.alignmentFactor = 1.0;
@@ -255,6 +257,9 @@ class Simulation {
       });
     }
 
+    // Clear food items
+    this.food = [];
+
     // Create new boids
     this.initBoids(this.config.boidCount);
   }
@@ -321,6 +326,9 @@ class Simulation {
         case this.CURSOR_MODES.PREDATOR:
           this.spawnBoid(coords.x, coords.y, true);
           break;
+        case this.CURSOR_MODES.FOOD:
+          this.spawnFood(coords.x, coords.y);
+          break;
       }
     });
 
@@ -342,6 +350,13 @@ class Simulation {
                 this.cursorMode === this.CURSOR_MODES.PREDATOR
               );
               this.lastBoidSpawnTime = now;
+            }
+            break;
+          case this.CURSOR_MODES.FOOD:
+            const nowFood = Date.now();
+            if (!this.lastFoodSpawnTime || nowFood - this.lastFoodSpawnTime > 100) {
+              this.spawnFood(coords.x, coords.y);
+              this.lastFoodSpawnTime = nowFood;
             }
             break;
           case this.CURSOR_MODES.WALL:
@@ -420,6 +435,9 @@ class Simulation {
         case this.CURSOR_MODES.PREDATOR:
           this.spawnBoid(coords.x, coords.y, true);
           break;
+        case this.CURSOR_MODES.FOOD:
+          this.spawnFood(coords.x, coords.y);
+          break;
       }
     });
 
@@ -465,6 +483,13 @@ class Simulation {
               this.cursorMode === this.CURSOR_MODES.PREDATOR
             );
             this.lastBoidSpawnTime = now;
+          }
+          break;
+        case this.CURSOR_MODES.FOOD:
+          const nowFood = Date.now();
+          if (!this.lastFoodSpawnTime || nowFood - this.lastFoodSpawnTime > 100) {
+            this.spawnFood(coords.x, coords.y);
+            this.lastFoodSpawnTime = nowFood;
           }
           break;
         case this.CURSOR_MODES.WALL:
@@ -596,6 +621,10 @@ class Simulation {
         this.canvas.style.cursor =
           'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ff0000" fill-opacity="0.333"/><circle cx="12" cy="12" r="4" fill="%23ff0000" fill-opacity="0.667"/></svg>\') 12 12, auto';
         break;
+      case this.CURSOR_MODES.FOOD:
+        this.canvas.style.cursor =
+          'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="%23ffaa00" fill-opacity="0.333"/><circle cx="12" cy="12" r="4" fill="%23ffaa00" fill-opacity="0.667"/></svg>\') 12 12, auto';
+        break;
       case this.CURSOR_MODES.WALL:
       default:
         this.canvas.style.cursor = "crosshair";
@@ -635,6 +664,16 @@ class Simulation {
     newBoid.update(1.0);
   }
 
+  // Spawn a new food item at the given coordinates
+  spawnFood(x, y) {
+    const newFood = {
+      position: { x: x, y: y },
+      size: 4, // Visual size of food
+      nutritionValue: 30, // Health boost when consumed
+    };
+    this.food.push(newFood);
+  }
+
   // Erase wall points and boids at the given coordinates
   eraseWallsAt(x, y) {
     const eraseRadiusSquared = Math.pow(this.eraserSize, 2);
@@ -671,7 +710,10 @@ class Simulation {
     // Also remove any boids within the eraser radius
     const boidsRemoved = this.eraseBoids(x, y, eraseRadiusSquared);
 
-    return wallsModified || boidsRemoved;
+    // Also remove any food within the eraser radius
+    const foodRemoved = this.eraseFood(x, y, eraseRadiusSquared);
+
+    return wallsModified || boidsRemoved || foodRemoved;
   }
 
   // Remove boids within the specified radius
@@ -729,6 +771,24 @@ class Simulation {
 
     // Return true if any boids were removed
     return this.boids.length < originalLength;
+  }
+
+  // Remove food within the specified radius
+  eraseFood(x, y, radiusSquared) {
+    const originalLength = this.food.length;
+
+    // Filter out food that are within the eraser radius
+    this.food = this.food.filter((food) => {
+      const dx = food.position.x - x;
+      const dy = food.position.y - y;
+      const distSquared = dx * dx + dy * dy;
+
+      // Keep food that are outside the eraser radius
+      return distSquared > radiusSquared;
+    });
+
+    // Return true if any food was removed
+    return this.food.length < originalLength;
   }
 
   // Clear all walls
@@ -1028,8 +1088,22 @@ class Simulation {
         this.cohesionFactor
       );
 
+      // Apply food seeking behavior for prey
+      if (this.food.length > 0) {
+        boid.seekFood(this.food);
+      }
+
       // Update boid position and apply true collision detection
       boid.update(timeScale);
+
+      // Check for food consumption
+      if (this.food.length > 0) {
+        const consumedFoodIndex = boid.checkFoodCollision(this.food);
+        if (consumedFoodIndex !== null) {
+          // Remove the consumed food
+          this.food.splice(consumedFoodIndex, 1);
+        }
+      }
 
       // Check if this boid has been killed
       if (boid.killed) {
@@ -1254,6 +1328,20 @@ class Simulation {
 
     // Draw walls from offscreen canvas
     this.ctx.drawImage(this.wallCanvas, 0, 0);
+
+    // Draw food items
+    for (const food of this.food) {
+      this.ctx.fillStyle = "rgba(255, 170, 0, 0.8)";
+      this.ctx.beginPath();
+      this.ctx.arc(food.position.x, food.position.y, food.size, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Add a subtle glow effect
+      this.ctx.fillStyle = "rgba(255, 200, 0, 0.3)";
+      this.ctx.beginPath();
+      this.ctx.arc(food.position.x, food.position.y, food.size * 2, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
 
     // Draw each boid, passing the full boids array for neighbor awareness
     for (const boid of this.boids) {
