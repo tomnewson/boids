@@ -592,6 +592,75 @@ class Boid {
     }
   }
 
+  // Food seeking method for prey
+  seekFood(foodItems) {
+    if (this.isPredator || foodItems.length === 0) return;
+
+    const foodDetectionRadius = 120; // How far prey can detect food
+    let nearestFood = null;
+    let nearestDist = Infinity;
+
+    // Find nearest food within detection range
+    for (const food of foodItems) {
+      const dx = food.position.x - this.position.x;
+      const dy = food.position.y - this.position.y;
+      const distSquared = dx * dx + dy * dy;
+
+      if (distSquared < foodDetectionRadius * foodDetectionRadius && distSquared < nearestDist) {
+        nearestDist = distSquared;
+        nearestFood = food;
+      }
+    }
+
+    // Apply attraction force to nearest food
+    if (nearestFood) {
+      const dx = nearestFood.position.x - this.position.x;
+      const dy = nearestFood.position.y - this.position.y;
+      const dist = Math.sqrt(nearestDist);
+
+      // Normalize direction and scale by attraction strength
+      const attractionStrength = 0.8;
+      const proximityFactor = Math.min(1, (foodDetectionRadius - dist) / foodDetectionRadius);
+      
+      const foodForce = {
+        x: (dx / dist) * attractionStrength * proximityFactor,
+        y: (dy / dist) * attractionStrength * proximityFactor,
+      };
+
+      this.applyForce(foodForce);
+    }
+  }
+
+  // Check for food collision and consume
+  checkFoodCollision(foodItems) {
+    if (this.isPredator) return null;
+
+    const consumeRadius = this.size + 4; // Collision radius for food consumption
+    const consumeRadiusSquared = consumeRadius * consumeRadius;
+
+    for (let i = 0; i < foodItems.length; i++) {
+      const food = foodItems[i];
+      const dx = food.position.x - this.position.x;
+      const dy = food.position.y - this.position.y;
+      const distSquared = dx * dx + dy * dy;
+
+      if (distSquared < consumeRadiusSquared) {
+        // Consume the food - boost health and accelerate reproduction
+        this.health += food.nutritionValue;
+        
+        // Cap health at maximum
+        if (this.health > this.maxHealth) {
+          this.health = this.maxHealth;
+        }
+
+        // Return the index of consumed food for removal
+        return i;
+      }
+    }
+
+    return null;
+  }
+
   // Wall avoidance method
   avoidWalls(simulation) {
     // Wall detection parameters

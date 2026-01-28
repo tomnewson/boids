@@ -85,6 +85,7 @@ window.onload = () => {
     // Brush control buttons
     const brushBtn1 = document.getElementById("brush-btn-1"); // WALL mode
     const brushBtn2 = document.getElementById("brush-btn-2"); // BOID/PREDATOR mode
+    const foodBtn = document.getElementById("food-btn"); // FOOD mode
 
     // Initialize minimize state
     let isMinimized = false;
@@ -146,6 +147,7 @@ window.onload = () => {
       eraserBtn.classList.remove("active");
       brushBtn1.classList.remove("active");
       brushBtn2.classList.remove("active");
+      foodBtn.classList.remove("active");
     }
 
     // Set cursor to ERASER mode
@@ -190,6 +192,13 @@ window.onload = () => {
       }
     }
 
+    // Set cursor to FOOD mode
+    function setFoodMode() {
+      clearActiveBrushes();
+      foodBtn.classList.add("active");
+      simulation.setCursorMode(simulation.CURSOR_MODES.FOOD);
+    }
+
     // Clear walls
     function clearWalls() {
       simulation.clearWalls();
@@ -219,6 +228,7 @@ window.onload = () => {
     eraserBtn.addEventListener("click", setEraserMode);
     brushBtn1.addEventListener("click", setWallMode);
     brushBtn2.addEventListener("click", toggleBoidMode);
+    foodBtn.addEventListener("click", setFoodMode);
     clearWallsBtn.addEventListener("click", clearWalls);
     minimizeBtn.addEventListener("click", toggleMinimize);
 
