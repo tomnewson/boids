@@ -664,12 +664,36 @@ class Simulation {
     newBoid.update(1.0);
   }
 
+  // Generate a random pastel color
+  generatePastelColor() {
+    // Generate pastel colors by using high values (200-255) for RGB components
+    // with some randomness to create soft, light colors
+    const r = Math.floor(Math.random() * 56) + 200; // 200-255
+    const g = Math.floor(Math.random() * 56) + 200; // 200-255
+    const b = Math.floor(Math.random() * 56) + 200; // 200-255
+    return `rgba(${r}, ${g}, ${b}, 0.8)`;
+  }
+
+  // Generate a glow color for the pastel food
+  generateGlowColor(baseColor) {
+    // Extract RGB values from the base color
+    const match = baseColor.match(/rgba\((\d+), (\d+), (\d+), [\d.]+\)/);
+    if (match) {
+      const r = parseInt(match[1]);
+      const g = parseInt(match[2]);
+      const b = parseInt(match[3]);
+      return `rgba(${r}, ${g}, ${b}, 0.3)`;
+    }
+    return "rgba(255, 255, 255, 0.3)"; // fallback
+  }
+
   // Spawn a new food item at the given coordinates
   spawnFood(x, y) {
     const newFood = {
       position: { x: x, y: y },
       size: 4, // Visual size of food
       nutritionValue: 30, // Health boost when consumed
+      color: this.generatePastelColor(), // Random pastel color
     };
     this.food.push(newFood);
   }
@@ -1331,13 +1355,13 @@ class Simulation {
 
     // Draw food items
     for (const food of this.food) {
-      this.ctx.fillStyle = "rgba(255, 170, 0, 0.8)";
+      this.ctx.fillStyle = food.color;
       this.ctx.beginPath();
       this.ctx.arc(food.position.x, food.position.y, food.size, 0, Math.PI * 2);
       this.ctx.fill();
       
       // Add a subtle glow effect
-      this.ctx.fillStyle = "rgba(255, 200, 0, 0.3)";
+      this.ctx.fillStyle = this.generateGlowColor(food.color);
       this.ctx.beginPath();
       this.ctx.arc(food.position.x, food.position.y, food.size * 2, 0, Math.PI * 2);
       this.ctx.fill();
