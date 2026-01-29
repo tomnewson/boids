@@ -551,6 +551,12 @@ class Simulation {
 
   // Add a point to the current wall
   addWallPoint(x, y) {
+    // Check if there's food at this position
+    const checkRadius = Math.max(this.wallBrushSize * 2, 12);
+    if (this.isFoodNearPosition(x, y, checkRadius)) {
+      return; // Don't place walls on food
+    }
+
     // Use circular brush pattern made up of small square tiles
     const pointSize = this.wallBrushSize;
     const brushRadius = this.wallBrushSize * 1.5; // Circle radius slightly larger than tile size
@@ -671,7 +677,7 @@ class Simulation {
     // This creates vibrant colors with strong hues
     const hue = Math.random();
     let r, g, b;
-    
+
     if (hue < 0.33) {
       // Red-dominant vibrant colors
       r = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
@@ -688,7 +694,7 @@ class Simulation {
       g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
       b = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
     }
-    
+
     return `rgba(${r}, ${g}, ${b}, 0.8)`;
   }
 
@@ -707,6 +713,12 @@ class Simulation {
 
   // Spawn a new food item at the given coordinates
   spawnFood(x, y) {
+    // Check if there's a wall at this position
+    const foodGlowRadius = 16; // Size * 4 for the glow rendering
+    if (this.isPointNearWall(x, y, foodGlowRadius)) {
+      return; // Don't spawn food on walls
+    }
+
     const color = this.generateSaturatedColor(); // Random saturated color
     const newFood = {
       position: { x: x, y: y },
@@ -901,6 +913,21 @@ class Simulation {
       }
     }
 
+    return false;
+  }
+
+  // Check if a point is close to food
+  isFoodNearPosition(x, y, radius) {
+    for (const food of this.food) {
+      const dx = x - food.position.x;
+      const dy = y - food.position.y;
+      const distanceSquared = dx * dx + dy * dy;
+      const foodRadius = food.size * 2; // Account for square rendering size
+
+      if (distanceSquared < Math.pow(foodRadius + radius, 2)) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -1384,7 +1411,7 @@ class Simulation {
         glowSize,
         glowSize
       );
-      
+
       // Draw main food square
       this.ctx.fillStyle = food.color;
       const foodSize = food.size * 2; // diameter as square size
