@@ -551,6 +551,12 @@ class Simulation {
 
   // Add a point to the current wall
   addWallPoint(x, y) {
+    // Check if there's food at this position
+    const checkRadius = Math.max(this.wallBrushSize * 2, 12);
+    if (this.isFoodNearPosition(x, y, checkRadius)) {
+      return; // Don't place walls on food
+    }
+
     // Use circular brush pattern made up of small square tiles
     const pointSize = this.wallBrushSize;
     const brushRadius = this.wallBrushSize * 1.5; // Circle radius slightly larger than tile size
@@ -664,12 +670,62 @@ class Simulation {
     newBoid.update(1.0);
   }
 
+  // Generate a random saturated color
+  generateSaturatedColor() {
+    // Generate saturated colors by varying RGB components significantly
+    // One or two components will be high (200-255) while others can be lower (100-255)
+    // This creates vibrant colors with strong hues
+    const hue = Math.random();
+    let r, g, b;
+
+    if (hue < 0.33) {
+      // Red-dominant vibrant colors
+      r = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+      g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+    } else if (hue < 0.66) {
+      // Green-dominant vibrant colors
+      r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      g = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+      b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+    } else {
+      // Blue-dominant vibrant colors
+      r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      b = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+    }
+
+    return `rgba(${r}, ${g}, ${b}, 0.8)`;
+  }
+
+  // Generate a glow color for the food
+  generateGlowColor(baseColor) {
+    // Extract RGB values from the base color
+    const match = baseColor.match(/rgba\((\d+), (\d+), (\d+), [\d.]+\)/);
+    if (match) {
+      const r = parseInt(match[1]);
+      const g = parseInt(match[2]);
+      const b = parseInt(match[3]);
+      return `rgba(${r}, ${g}, ${b}, 0.3)`;
+    }
+    return "rgba(255, 255, 255, 0.3)"; // fallback
+  }
+
   // Spawn a new food item at the given coordinates
   spawnFood(x, y) {
+    // Check if there's a wall at this position
+    const foodGlowRadius = 16; // Size * 4 for the glow rendering
+    if (this.isPointNearWall(x, y, foodGlowRadius)) {
+      return; // Don't spawn food on walls
+    }
+
+    const color = this.generateSaturatedColor(); // Random saturated color
     const newFood = {
       position: { x: x, y: y },
       size: 4, // Visual size of food
       nutritionValue: 30, // Health boost when consumed
+      color: color,
+      glowColor: this.generateGlowColor(color), // Pre-compute glow color
     };
     this.food.push(newFood);
   }
@@ -857,6 +913,21 @@ class Simulation {
       }
     }
 
+    return false;
+  }
+
+  // Check if a point is close to food
+  isFoodNearPosition(x, y, radius) {
+    for (const food of this.food) {
+      const dx = x - food.position.x;
+      const dy = y - food.position.y;
+      const distanceSquared = dx * dx + dy * dy;
+      const foodRadius = food.size * 2; // Account for square rendering size
+
+      if (distanceSquared < Math.pow(foodRadius + radius, 2)) {
+        return true;
+      }
+    }
     return false;
   }
 
@@ -1331,16 +1402,25 @@ class Simulation {
 
     // Draw food items
     for (const food of this.food) {
-      this.ctx.fillStyle = "rgba(255, 170, 0, 0.8)";
-      this.ctx.beginPath();
-      this.ctx.arc(food.position.x, food.position.y, food.size, 0, Math.PI * 2);
-      this.ctx.fill();
-      
-      // Add a subtle glow effect
-      this.ctx.fillStyle = "rgba(255, 200, 0, 0.3)";
-      this.ctx.beginPath();
-      this.ctx.arc(food.position.x, food.position.y, food.size * 2, 0, Math.PI * 2);
-      this.ctx.fill();
+      // Draw glow effect (larger square behind)
+      this.ctx.fillStyle = food.glowColor;
+      const glowSize = food.size * 4; // 2x diameter for glow
+      this.ctx.fillRect(
+        food.position.x - glowSize / 2,
+        food.position.y - glowSize / 2,
+        glowSize,
+        glowSize
+      );
+
+      // Draw main food square
+      this.ctx.fillStyle = food.color;
+      const foodSize = food.size * 2; // diameter as square size
+      this.ctx.fillRect(
+        food.position.x - foodSize / 2,
+        food.position.y - foodSize / 2,
+        foodSize,
+        foodSize
+      );
     }
 
     // Draw each boid, passing the full boids array for neighbor awareness
