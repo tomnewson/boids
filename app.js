@@ -87,8 +87,11 @@ window.onload = () => {
     const brushBtn2 = document.getElementById("brush-btn-2"); // BOID/PREDATOR mode
     const foodBtn = document.getElementById("food-btn"); // FOOD mode
 
-    // Initialize minimize state
-    let isMinimized = false;
+    // Initialize minimize state - start minimized by default
+    let isMinimized = true;
+    floatingControls.classList.add("minimized");
+    minimizeBtn.textContent = "+";
+    minimizeBtn.title = "Expand";
 
     // Track button states
     const buttonState = {

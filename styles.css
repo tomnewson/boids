@@ -54,6 +54,14 @@ body {
   align-items: center;
 }
 
+/* Volume control in top left corner */
+.volume-control {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+}
+
 .controls {
   display: flex;
   flex-direction: column;
@@ -253,6 +261,11 @@ span {
     left: 10px;
     padding: 10px;
     gap: 10px;
+  }
+
+  .volume-control {
+    top: 10px;
+    left: 10px;
   }
 
   .controls {
