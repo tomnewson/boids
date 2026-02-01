@@ -112,6 +112,13 @@
         flex-direction: column;
         gap: 10px;
       }
+      /* Volume control in top left corner */
+      .volume-control {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 100;
+      }
     </style>
     <!-- Regular stylesheet loads after for complete styling -->
     <link rel="stylesheet" href="styles.css" />
@@ -123,6 +130,18 @@
   </head>
   <body>
     <canvas id="boids-canvas"></canvas>
+    
+    <!-- Volume button in top left corner -->
+    <div class="volume-control">
+      <button
+        id="audio-btn"
+        class="icon-btn audio-off"
+        title="Toggle Sound"
+      >
+        🔇
+      </button>
+    </div>
+
     <div class="floating-controls">
       <div class="controls">
         <div class="control-group">
@@ -169,13 +188,6 @@
         </div>
         <div class="button-container">
           <button id="reset-btn" class="text-btn" title="Reset">Reset</button>
-          <button
-            id="audio-btn"
-            class="icon-btn audio-off"
-            title="Toggle Sound"
-          >
-            🔇
-          </button>
           <button id="clear-walls-btn" class="text-btn" title="Clear Walls">
             Clear Walls
           </button>
