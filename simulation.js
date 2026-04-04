@@ -897,22 +897,6 @@ class Simulation {
       }
     }
 
-    // Also check the current wall being drawn if it exists
-    if (this.currentWall && this.currentWall.length > 0) {
-      for (let p = 0; p < this.currentWall.length; p++) {
-        const point = this.currentWall[p];
-
-        // Distance check for current wall points
-        const dx = x - point.x;
-        const dy = y - point.y;
-        const distanceSquared = dx * dx + dy * dy;
-
-        if (distanceSquared < Math.pow(point.size / 2 + radius * 0.6, 2)) {
-          return true;
-        }
-      }
-    }
-
     return false;
   }
 
@@ -956,29 +940,6 @@ class Simulation {
           // Normal points away from the wall point
           normal.x = dx / distance;
           normal.y = dy / distance;
-        }
-      }
-    }
-
-    // Also check the current wall being drawn
-    if (this.currentWall && this.currentWall.length > 0) {
-      for (const point of this.currentWall) {
-        // Calculate distance from point to current wall point
-        const dx = x - point.x;
-        const dy = y - point.y;
-        const distanceSquared = dx * dx + dy * dy;
-
-        // If this is the closest wall point so far
-        if (distanceSquared < closestDistance) {
-          closestDistance = distanceSquared;
-
-          // Normalize the vector away from the wall point
-          const distance = Math.sqrt(distanceSquared);
-          if (distance > 0) {
-            // Normal points away from the wall point
-            normal.x = dx / distance;
-            normal.y = dy / distance;
-          }
         }
       }
     }
