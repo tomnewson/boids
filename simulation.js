@@ -101,30 +101,33 @@ class Simulation {
     // Resize is handled by the app.js listener which calls handleResize()
   }
 
-  // Resize canvas to fill its container
+  // Resize canvas to match its actual rendered CSS size
   resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
-    const logicalWidth = window.innerWidth;
-    const logicalHeight = window.innerHeight;
+
+    // Read the true rendered size from the DOM — this matches whatever CSS
+    // (100vw/100vh, zoom level, Safari URL bar, etc.) produces, rather than
+    // relying on window.innerWidth/Height which can differ.
+    const rect = this.canvas.getBoundingClientRect();
+    const logicalWidth = rect.width;
+    const logicalHeight = rect.height;
 
     // Store logical dimensions on canvas so boids can read them
     this.canvas.logicalWidth = logicalWidth;
     this.canvas.logicalHeight = logicalHeight;
 
     // Scale canvas buffer to physical pixels for crisp rendering on HiDPI screens
-    this.canvas.width = logicalWidth * dpr;
-    this.canvas.height = logicalHeight * dpr;
-    this.canvas.style.width = logicalWidth + "px";
-    this.canvas.style.height = logicalHeight + "px";
+    this.canvas.width = Math.round(logicalWidth * dpr);
+    this.canvas.height = Math.round(logicalHeight * dpr);
 
     // Re-apply DPR scale and context settings (canvas resize resets all context state)
     this.ctx.scale(dpr, dpr);
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "medium";
 
-    // Wall canvas stays at logical size — walls are solid fills and already look crisp
-    this.wallCanvas.width = logicalWidth;
-    this.wallCanvas.height = logicalHeight;
+    // Wall canvas matches logical size — walls are solid fills and already look crisp
+    this.wallCanvas.width = Math.round(logicalWidth);
+    this.wallCanvas.height = Math.round(logicalHeight);
     this.wallNeedsUpdate = true; // Mark walls for redraw
 
     // Rebuild spatial index when canvas size changes
@@ -132,35 +135,17 @@ class Simulation {
   }
 
   // Handle window resize events
-  handleResize(width, height) {
-    const dpr = window.devicePixelRatio || 1;
-
-    // width/height are logical (CSS pixel) dimensions
-    this.canvas.logicalWidth = width;
-    this.canvas.logicalHeight = height;
-
-    this.canvas.width = width * dpr;
-    this.canvas.height = height * dpr;
-    this.canvas.style.width = width + "px";
-    this.canvas.style.height = height + "px";
-    // Re-apply context settings (canvas resize resets all context state)
-    this.ctx.scale(dpr, dpr);
-    this.ctx.imageSmoothingEnabled = true;
-    this.ctx.imageSmoothingQuality = "medium";
-
-    // Wall canvas stays at logical size
-    this.wallCanvas.width = width;
-    this.wallCanvas.height = height;
-    this.wallNeedsUpdate = true; // Mark walls for redraw
+  handleResize() {
+    // Resize the canvas buffer to match the new rendered size
+    this.resizeCanvas();
 
     // Keep boids within the new canvas bounds
+    const w = this.canvas.logicalWidth;
+    const h = this.canvas.logicalHeight;
     for (const boid of this.boids) {
-      if (boid.position.x > width) boid.position.x = width - 10;
-      if (boid.position.y > height) boid.position.y = height - 10;
+      if (boid.position.x > w) boid.position.x = w - 10;
+      if (boid.position.y > h) boid.position.y = h - 10;
     }
-
-    // Rebuild spatial index when canvas size changes
-    this.rebuildWallSpatialIndex();
   }
 
   // Create a spatial index for more efficient wall collision detection
