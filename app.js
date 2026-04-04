@@ -56,8 +56,9 @@ window.onload = () => {
 
   // Handle window resize
   window.addEventListener("resize", () => {
+    // Pass logical (CSS pixel) dimensions — handleResize applies DPR internally
     if (window.simulation) {
-      window.simulation.handleResize();
+      window.simulation.handleResize(window.innerWidth, window.innerHeight);
     }
   });
 
