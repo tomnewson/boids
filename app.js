@@ -3,6 +3,8 @@ window.onload = () => {
   const canvas = document.getElementById("boids-canvas");
 
   // Set canvas to fill the entire window
+  // Note: the Simulation constructor calls resizeCanvas() which handles DPR scaling,
+  // so these initial values are immediately overridden — kept for clarity only.
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
@@ -54,11 +56,8 @@ window.onload = () => {
 
   // Handle window resize
   window.addEventListener("resize", () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    // If simulation exists in global scope, tell it about the resize
     if (window.simulation) {
-      window.simulation.handleResize(canvas.width, canvas.height);
+      window.simulation.handleResize();
     }
   });
 

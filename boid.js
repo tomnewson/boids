@@ -545,8 +545,8 @@ class Boid {
 
   // Keep boids within the canvas by wrapping around edges
   edges() {
-    const width = this.canvas.width;
-    const height = this.canvas.height;
+    const width = this.canvas.logicalWidth;
+    const height = this.canvas.logicalHeight;
 
     if (this.position.x > width) this.position.x = 0;
     if (this.position.x < 0) this.position.x = width;
@@ -954,7 +954,7 @@ class Boid {
 
       // Calculate lightness - use health percentage to impact lightness
       // Healthy predators are bright, dying ones are dark
-      const baseLight = 40 + (1 - this.position.y / this.canvas.height) * 30;
+      const baseLight = 40 + (1 - this.position.y / this.canvas.logicalHeight) * 30;
       const lightness = healthPercentage * baseLight;
 
       return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
@@ -971,12 +971,12 @@ class Boid {
       const saturation = 30 + normalizedSpeed * 40;
 
       // Apply a subtle hue shift based on horizontal position
-      const normalizedX = this.position.x / this.canvas.width;
+      const normalizedX = this.position.x / this.canvas.logicalWidth;
       const hueShift = (normalizedX - 0.5) * 20; // -10 to +10 degree shift
       const adjustedHue = (this.hue + hueShift + 360) % 360;
 
       // Health affects lightness - low health boids are darker
-      const baseLight = 30 + (1 - this.position.y / this.canvas.height) * 50;
+      const baseLight = 30 + (1 - this.position.y / this.canvas.logicalHeight) * 50;
       const lightness = healthPercentage * baseLight;
 
       // Return the final HSL color

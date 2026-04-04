@@ -277,7 +277,7 @@ class AudioEngine {
       }
 
       // Calculate note parameters
-      const frequency = this.positionToNote(boid.position.y, canvas.height);
+      const frequency = this.positionToNote(boid.position.y, canvas.logicalHeight);
       const speed = Math.sqrt(
         boid.velocity.x * boid.velocity.x + boid.velocity.y * boid.velocity.y
       );
@@ -287,7 +287,7 @@ class AudioEngine {
       const duration = 0.3 + (1 - normalizedSpeed) * 0.7;
 
       // Map horizontal position to pan
-      const pan = (boid.position.x / canvas.width) * 2 - 1;
+      const pan = (boid.position.x / canvas.logicalWidth) * 2 - 1;
 
       // Map speed to volume (faster = louder)
       const volume = 0.1 + normalizedSpeed * 0.2;
@@ -295,7 +295,7 @@ class AudioEngine {
       // Choose oscillator type based on position in the flock
       const types = ["sine", "triangle", "sawtooth"];
       const typeIndex = Math.floor(
-        (boid.position.x / canvas.width) * types.length
+        (boid.position.x / canvas.logicalWidth) * types.length
       );
       const type = types[Math.min(typeIndex, types.length - 1)];
 

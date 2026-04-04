@@ -98,23 +98,36 @@ class Simulation {
 
     // Start animation loop
     this.animate();
-
-    // Handle window resize
-    window.addEventListener("resize", () => {
-      this.resizeCanvas();
-    });
+    // Resize is handled by the app.js listener which calls handleResize()
   }
 
-  // Resize canvas to fill its container
+  // Resize canvas to match its actual rendered CSS size
   resizeCanvas() {
-    const container = this.canvas.parentElement;
-    // Use full window dimensions
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
 
-    // Resize wall canvas to match main canvas
-    this.wallCanvas.width = this.canvas.width;
-    this.wallCanvas.height = this.canvas.height;
+    // Read the true rendered size from the DOM — this matches whatever CSS
+    // (100vw/100vh, zoom level, Safari URL bar, etc.) produces, rather than
+    // relying on window.innerWidth/Height which can differ.
+    const rect = this.canvas.getBoundingClientRect();
+    const logicalWidth = rect.width;
+    const logicalHeight = rect.height;
+
+    // Store logical dimensions on canvas so boids can read them
+    this.canvas.logicalWidth = logicalWidth;
+    this.canvas.logicalHeight = logicalHeight;
+
+    // Scale canvas buffer to physical pixels for crisp rendering on HiDPI screens
+    this.canvas.width = Math.round(logicalWidth * dpr);
+    this.canvas.height = Math.round(logicalHeight * dpr);
+
+    // Re-apply DPR scale and context settings (canvas resize resets all context state)
+    this.ctx.scale(dpr, dpr);
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "medium";
+
+    // Wall canvas matches logical size — walls are solid fills and already look crisp
+    this.wallCanvas.width = Math.round(logicalWidth);
+    this.wallCanvas.height = Math.round(logicalHeight);
     this.wallNeedsUpdate = true; // Mark walls for redraw
 
     // Rebuild spatial index when canvas size changes
@@ -122,24 +135,17 @@ class Simulation {
   }
 
   // Handle window resize events
-  handleResize(width, height) {
-    // Update canvas dimensions
-    this.canvas.width = width;
-    this.canvas.height = height;
-
-    // Resize wall canvas to match main canvas
-    this.wallCanvas.width = width;
-    this.wallCanvas.height = height;
-    this.wallNeedsUpdate = true; // Mark walls for redraw
+  handleResize() {
+    // Resize the canvas buffer to match the new rendered size
+    this.resizeCanvas();
 
     // Keep boids within the new canvas bounds
+    const w = this.canvas.logicalWidth;
+    const h = this.canvas.logicalHeight;
     for (const boid of this.boids) {
-      if (boid.position.x > width) boid.position.x = width - 10;
-      if (boid.position.y > height) boid.position.y = height - 10;
+      if (boid.position.x > w) boid.position.x = w - 10;
+      if (boid.position.y > h) boid.position.y = h - 10;
     }
-
-    // Rebuild spatial index when canvas size changes
-    this.rebuildWallSpatialIndex();
   }
 
   // Create a spatial index for more efficient wall collision detection
@@ -186,8 +192,8 @@ class Simulation {
 
     // Create prey boids
     for (let i = 0; i < preyCount; i++) {
-      const x = Math.random() * this.canvas.width;
-      const y = Math.random() * this.canvas.height;
+      const x = Math.random() * this.canvas.logicalWidth;
+      const y = Math.random() * this.canvas.logicalHeight;
       const boid = new Boid(x, y, this.canvas);
 
       // Set prey properties
@@ -200,8 +206,8 @@ class Simulation {
 
     // Create predator boids
     for (let i = 0; i < predatorCount; i++) {
-      const x = Math.random() * this.canvas.width;
-      const y = Math.random() * this.canvas.height;
+      const x = Math.random() * this.canvas.logicalWidth;
+      const y = Math.random() * this.canvas.logicalHeight;
       const boid = new Boid(x, y, this.canvas);
 
       // Set predator properties
@@ -230,8 +236,8 @@ class Simulation {
       this.boids.length > 0
     ) {
       // Get canvas dimensions for sound placement
-      const canvasWidth = this.canvas.width;
-      const canvasHeight = this.canvas.height;
+      const canvasWidth = this.canvas.logicalWidth;
+      const canvasHeight = this.canvas.logicalHeight;
 
       // Store the current boids
       const oldBoids = [...this.boids];
@@ -275,13 +281,10 @@ class Simulation {
   getCanvasCoordinates(e) {
     const rect = this.canvas.getBoundingClientRect();
 
-    // Calculate the scaling ratio of the canvas
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-
-    // Apply scaling to the mouse coordinates
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    // Use logical (CSS pixel) coordinates — the drawing context is already
+    // scaled by devicePixelRatio, so we work in CSS-pixel space throughout
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     return { x, y };
   }
@@ -290,13 +293,8 @@ class Simulation {
   getTouchCoordinates(touch) {
     const rect = this.canvas.getBoundingClientRect();
 
-    // Calculate the scaling ratio of the canvas
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-
-    // Apply scaling to the touch coordinates
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
 
     return { x, y };
   }
@@ -818,8 +816,8 @@ class Simulation {
         this.audioEngine.playDeathSound(
           boid.x,
           boid.y,
-          this.canvas.width,
-          this.canvas.height,
+          this.canvas.logicalWidth,
+          this.canvas.logicalHeight,
           "player" // Add death cause: player killed these boids with eraser
         );
       }
@@ -1163,8 +1161,8 @@ class Simulation {
           this.audioEngine.playDeathSound(
             boid.position.x,
             boid.position.y,
-            this.canvas.width,
-            this.canvas.height,
+            this.canvas.logicalWidth,
+            this.canvas.logicalHeight,
             "predator" // Add death cause: these boids were killed by predators
           );
         }
@@ -1333,7 +1331,7 @@ class Simulation {
   draw() {
     // Clear canvas
     this.ctx.fillStyle = "#111";
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
 
     // Redraw walls only if needed
     if (this.wallNeedsUpdate) {
@@ -1358,8 +1356,11 @@ class Simulation {
       this.wallNeedsUpdate = false; // Reset update flag
     }
 
-    // Draw walls from offscreen canvas
+    // Draw walls from offscreen canvas — disable smoothing to keep walls crisp
+    // even on fractional devicePixelRatio devices (e.g. 1.5× Android)
+    this.ctx.imageSmoothingEnabled = false;
     this.ctx.drawImage(this.wallCanvas, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
 
     // Draw food items
     for (const food of this.food) {
