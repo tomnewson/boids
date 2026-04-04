@@ -114,8 +114,7 @@ class Simulation {
     // Scale canvas buffer to physical pixels for crisp rendering on HiDPI screens
     this.canvas.width = logicalWidth * dpr;
     this.canvas.height = logicalHeight * dpr;
-    this.canvas.style.width = logicalWidth + "px";
-    this.canvas.style.height = logicalHeight + "px";
+    // Visual size is controlled by CSS (100vw/100vh) — don't override with inline styles
 
     // Re-apply DPR scale and context settings (canvas resize resets all context state)
     this.ctx.scale(dpr, dpr);
@@ -141,8 +140,7 @@ class Simulation {
 
     this.canvas.width = width * dpr;
     this.canvas.height = height * dpr;
-    this.canvas.style.width = width + "px";
-    this.canvas.style.height = height + "px";
+    // Visual size is controlled by CSS (100vw/100vh)
     // Re-apply context settings (canvas resize resets all context state)
     this.ctx.scale(dpr, dpr);
     this.ctx.imageSmoothingEnabled = true;
