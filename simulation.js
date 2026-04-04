@@ -107,14 +107,26 @@ class Simulation {
 
   // Resize canvas to fill its container
   resizeCanvas() {
-    const container = this.canvas.parentElement;
-    // Use full window dimensions
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const logicalWidth = window.innerWidth;
+    const logicalHeight = window.innerHeight;
 
-    // Resize wall canvas to match main canvas
-    this.wallCanvas.width = this.canvas.width;
-    this.wallCanvas.height = this.canvas.height;
+    // Store logical dimensions on canvas so boids can read them
+    this.canvas.logicalWidth = logicalWidth;
+    this.canvas.logicalHeight = logicalHeight;
+
+    // Scale canvas buffer to physical pixels for crisp rendering on HiDPI screens
+    this.canvas.width = logicalWidth * dpr;
+    this.canvas.height = logicalHeight * dpr;
+    this.canvas.style.width = logicalWidth + "px";
+    this.canvas.style.height = logicalHeight + "px";
+
+    // Re-apply DPR scale (canvas resize resets transform)
+    this.ctx.scale(dpr, dpr);
+
+    // Wall canvas stays at logical size — walls are solid fills and already look crisp
+    this.wallCanvas.width = logicalWidth;
+    this.wallCanvas.height = logicalHeight;
     this.wallNeedsUpdate = true; // Mark walls for redraw
 
     // Rebuild spatial index when canvas size changes
@@ -123,11 +135,19 @@ class Simulation {
 
   // Handle window resize events
   handleResize(width, height) {
-    // Update canvas dimensions
-    this.canvas.width = width;
-    this.canvas.height = height;
+    const dpr = window.devicePixelRatio || 1;
 
-    // Resize wall canvas to match main canvas
+    // width/height are logical (CSS pixel) dimensions
+    this.canvas.logicalWidth = width;
+    this.canvas.logicalHeight = height;
+
+    this.canvas.width = width * dpr;
+    this.canvas.height = height * dpr;
+    this.canvas.style.width = width + "px";
+    this.canvas.style.height = height + "px";
+    this.ctx.scale(dpr, dpr);
+
+    // Wall canvas stays at logical size
     this.wallCanvas.width = width;
     this.wallCanvas.height = height;
     this.wallNeedsUpdate = true; // Mark walls for redraw
@@ -186,8 +206,8 @@ class Simulation {
 
     // Create prey boids
     for (let i = 0; i < preyCount; i++) {
-      const x = Math.random() * this.canvas.width;
-      const y = Math.random() * this.canvas.height;
+      const x = Math.random() * this.canvas.logicalWidth;
+      const y = Math.random() * this.canvas.logicalHeight;
       const boid = new Boid(x, y, this.canvas);
 
       // Set prey properties
@@ -200,8 +220,8 @@ class Simulation {
 
     // Create predator boids
     for (let i = 0; i < predatorCount; i++) {
-      const x = Math.random() * this.canvas.width;
-      const y = Math.random() * this.canvas.height;
+      const x = Math.random() * this.canvas.logicalWidth;
+      const y = Math.random() * this.canvas.logicalHeight;
       const boid = new Boid(x, y, this.canvas);
 
       // Set predator properties
@@ -230,8 +250,8 @@ class Simulation {
       this.boids.length > 0
     ) {
       // Get canvas dimensions for sound placement
-      const canvasWidth = this.canvas.width;
-      const canvasHeight = this.canvas.height;
+      const canvasWidth = this.canvas.logicalWidth;
+      const canvasHeight = this.canvas.logicalHeight;
 
       // Store the current boids
       const oldBoids = [...this.boids];
@@ -275,13 +295,10 @@ class Simulation {
   getCanvasCoordinates(e) {
     const rect = this.canvas.getBoundingClientRect();
 
-    // Calculate the scaling ratio of the canvas
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-
-    // Apply scaling to the mouse coordinates
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    // Use logical (CSS pixel) coordinates — the drawing context is already
+    // scaled by devicePixelRatio, so we work in CSS-pixel space throughout
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     return { x, y };
   }
@@ -290,13 +307,8 @@ class Simulation {
   getTouchCoordinates(touch) {
     const rect = this.canvas.getBoundingClientRect();
 
-    // Calculate the scaling ratio of the canvas
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-
-    // Apply scaling to the touch coordinates
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
 
     return { x, y };
   }
@@ -818,8 +830,8 @@ class Simulation {
         this.audioEngine.playDeathSound(
           boid.x,
           boid.y,
-          this.canvas.width,
-          this.canvas.height,
+          this.canvas.logicalWidth,
+          this.canvas.logicalHeight,
           "player" // Add death cause: player killed these boids with eraser
         );
       }
@@ -1163,8 +1175,8 @@ class Simulation {
           this.audioEngine.playDeathSound(
             boid.position.x,
             boid.position.y,
-            this.canvas.width,
-            this.canvas.height,
+            this.canvas.logicalWidth,
+            this.canvas.logicalHeight,
             "predator" // Add death cause: these boids were killed by predators
           );
         }
@@ -1333,7 +1345,7 @@ class Simulation {
   draw() {
     // Clear canvas
     this.ctx.fillStyle = "#111";
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
 
     // Redraw walls only if needed
     if (this.wallNeedsUpdate) {
