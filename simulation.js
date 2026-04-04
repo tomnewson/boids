@@ -98,11 +98,7 @@ class Simulation {
 
     // Start animation loop
     this.animate();
-
-    // Handle window resize
-    window.addEventListener("resize", () => {
-      this.resizeCanvas();
-    });
+    // Resize is handled by the app.js listener which calls handleResize()
   }
 
   // Resize canvas to fill its container
@@ -121,8 +117,10 @@ class Simulation {
     this.canvas.style.width = logicalWidth + "px";
     this.canvas.style.height = logicalHeight + "px";
 
-    // Re-apply DPR scale (canvas resize resets transform)
+    // Re-apply DPR scale and context settings (canvas resize resets all context state)
     this.ctx.scale(dpr, dpr);
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "medium";
 
     // Wall canvas stays at logical size — walls are solid fills and already look crisp
     this.wallCanvas.width = logicalWidth;
@@ -145,7 +143,10 @@ class Simulation {
     this.canvas.height = height * dpr;
     this.canvas.style.width = width + "px";
     this.canvas.style.height = height + "px";
+    // Re-apply context settings (canvas resize resets all context state)
     this.ctx.scale(dpr, dpr);
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "medium";
 
     // Wall canvas stays at logical size
     this.wallCanvas.width = width;
@@ -1370,8 +1371,11 @@ class Simulation {
       this.wallNeedsUpdate = false; // Reset update flag
     }
 
-    // Draw walls from offscreen canvas
+    // Draw walls from offscreen canvas — disable smoothing to keep walls crisp
+    // even on fractional devicePixelRatio devices (e.g. 1.5× Android)
+    this.ctx.imageSmoothingEnabled = false;
     this.ctx.drawImage(this.wallCanvas, 0, 0);
+    this.ctx.imageSmoothingEnabled = true;
 
     // Draw food items
     for (const food of this.food) {
