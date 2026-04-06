@@ -498,3 +498,5 @@ class AudioEngine {
     return false;
   }
 }
+
+export { AudioEngine };

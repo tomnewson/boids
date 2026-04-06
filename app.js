@@ -1,3 +1,5 @@
+import { Simulation } from './simulation.js';
+
 window.onload = () => {
   // Debug info
   const canvas = document.getElementById("boids-canvas");

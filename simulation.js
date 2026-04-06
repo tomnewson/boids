@@ -1,3 +1,6 @@
+import { Boid, PREY_MAX_SPEED, PREDATOR_MAX_SPEED, PREY_STEERING_FACTOR, PREDATOR_STEERING_FACTOR } from './boid.js';
+import { AudioEngine } from './audio.js';
+
 class Simulation {
   constructor(canvasId, config = {}) {
     this.canvas = document.getElementById(canvasId);
@@ -1483,3 +1486,5 @@ class Simulation {
     return this.audioEnabled;
   }
 }
+
+export { Simulation };

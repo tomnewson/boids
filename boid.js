@@ -1067,3 +1067,5 @@ class Boid {
     ctx.restore();
   }
 }
+
+export { Boid, PREY_MAX_SPEED, PREDATOR_MAX_SPEED, PREY_STEERING_FACTOR, PREDATOR_STEERING_FACTOR };
