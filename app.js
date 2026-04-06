@@ -1,62 +1,8 @@
 import { Simulation } from './simulation.js';
 
 window.onload = () => {
-  // Debug info
   const canvas = document.getElementById("boids-canvas");
 
-  // Set canvas to fill the entire window
-  // Note: the Simulation constructor calls resizeCanvas() which handles DPR scaling,
-  // so these initial values are immediately overridden — kept for clarity only.
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-
-  // Enable anti-aliasing through image smoothing
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "medium"; // Balance between quality and performance
-
-  console.log("Canvas element:", canvas);
-  console.log("Canvas dimensions:", canvas.width, "x", canvas.height);
-
-  // Configure simulation for optimal performance across devices
-  const configureForDevice = () => {
-    // Check for iOS device
-    const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const isMobile =
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent
-      );
-
-    // Create configuration object
-    const config = {
-      useHighPerformanceMode: true,
-      boidCount: 0,
-      targetFPS: 60,
-    };
-
-    // Check for low-end devices or potential low-power mode
-    if (
-      (isMobile && navigator.deviceMemory && navigator.deviceMemory < 4) ||
-      (isIOS && isSafari)
-    ) {
-      // These settings help ensure consistent speed even in low power mode
-      config.useHighPerformanceMode = false;
-      // Never reduce the number of boids
-
-      console.log(
-        "Detected potential low-power mode device, optimizing performance"
-      );
-    }
-
-    return config;
-  };
-
-  // Get configuration based on device
-  const deviceConfig = configureForDevice();
-
-  // Handle window resize
   window.addEventListener("resize", () => {
     if (window.simulation) {
       window.simulation.handleResize();
@@ -64,13 +10,10 @@ window.onload = () => {
   });
 
   try {
-    // Initialize simulation with device-specific configuration
-    const simulation = new Simulation(canvas, deviceConfig);
+    const simulation = new Simulation(canvas);
     simulation.init();
-    // Store in window object so resize handler can access it
     window.simulation = simulation;
 
-    // UI elements
     const separationSlider = document.getElementById("separation");
     const alignmentSlider = document.getElementById("alignment");
     const cohesionSlider = document.getElementById("cohesion");
@@ -84,23 +27,19 @@ window.onload = () => {
     const minimizeBtn = document.getElementById("minimize-btn");
     const floatingControls = document.querySelector(".floating-controls");
 
-    // Brush control buttons
     const brushBtn1 = document.getElementById("brush-btn-1"); // WALL mode
     const brushBtn2 = document.getElementById("brush-btn-2"); // BOID/PREDATOR mode
     const foodBtn = document.getElementById("food-btn"); // FOOD mode
 
-    // Initialize minimize state - start minimized by default
     let isMinimized = true;
     floatingControls.classList.add("minimized");
     minimizeBtn.textContent = "+";
     minimizeBtn.title = "Expand";
 
-    // Track button states
     const buttonState = {
-      boidModePredator: false, // false = normal boid, true = predator
+      boidModePredator: false,
     };
 
-    // Update simulation parameters when sliders change
     function updateParams() {
       const separation = parseFloat(separationSlider.value);
       const alignment = parseFloat(alignmentSlider.value);
@@ -113,26 +52,19 @@ window.onload = () => {
       simulation.updateParams(separation, alignment, cohesion);
     }
 
-    // Toggle audio on/off
     function toggleAudio() {
       const audioEnabled = simulation.toggleAudio();
-
-      // Update UI immediately for better user experience
       updateAudioButtonUI(audioEnabled);
 
       // Check actual state after a brief delay to ensure accuracy
       setTimeout(() => {
         const actualState = simulation.audioEngine.isRunning();
         if (actualState !== audioEnabled) {
-          console.log(
-            "Correcting audio button state to match actual audio state"
-          );
           updateAudioButtonUI(actualState);
         }
       }, 500);
     }
 
-    // Helper function to update audio button UI
     function updateAudioButtonUI(enabled) {
       if (enabled) {
         audioBtn.textContent = "🔊";
@@ -147,7 +79,6 @@ window.onload = () => {
       }
     }
 
-    // Clear active state from all brush buttons
     function clearActiveBrushes() {
       eraserBtn.classList.remove("active");
       brushBtn1.classList.remove("active");
@@ -155,21 +86,18 @@ window.onload = () => {
       foodBtn.classList.remove("active");
     }
 
-    // Set cursor to ERASER mode
     function setEraserMode() {
       clearActiveBrushes();
       eraserBtn.classList.add("active");
       simulation.setCursorMode(simulation.CURSOR_MODES.ERASER);
     }
 
-    // Set cursor to WALL mode
     function setWallMode() {
       clearActiveBrushes();
       brushBtn1.classList.add("active");
       simulation.setCursorMode(simulation.CURSOR_MODES.WALL);
     }
 
-    // Toggle between BOID and PREDATOR modes
     function toggleBoidMode() {
       clearActiveBrushes();
       brushBtn2.classList.add("active");
@@ -178,41 +106,30 @@ window.onload = () => {
         simulation.getCursorMode() === simulation.CURSOR_MODES.BOID ||
         simulation.getCursorMode() === simulation.CURSOR_MODES.PREDATOR;
 
-      // Toggle between BOID and PREDATOR modes
       if (
         (buttonState.boidModePredator && isSpawnerMode) ||
         (!buttonState.boidModePredator && !isSpawnerMode)
       ) {
-        // Switch to normal boid mode
         simulation.setCursorMode(simulation.CURSOR_MODES.BOID);
         buttonState.boidModePredator = false;
-        brushBtn2.textContent = "🧬"; // Original emoji for normal boids
+        brushBtn2.textContent = "🧬";
         brushBtn2.title = "Boid Spawner Mode";
       } else {
-        // Switch to predator mode
         simulation.setCursorMode(simulation.CURSOR_MODES.PREDATOR);
         buttonState.boidModePredator = true;
-        brushBtn2.textContent = "🦅"; // Eagle emoji for predator
+        brushBtn2.textContent = "🦅";
         brushBtn2.title = "Predator Spawner Mode";
       }
     }
 
-    // Set cursor to FOOD mode
     function setFoodMode() {
       clearActiveBrushes();
       foodBtn.classList.add("active");
       simulation.setCursorMode(simulation.CURSOR_MODES.FOOD);
     }
 
-    // Clear walls
-    function clearWalls() {
-      simulation.clearWalls();
-    }
-
-    // Toggle minimize/expand
     function toggleMinimize() {
       isMinimized = !isMinimized;
-
       if (isMinimized) {
         floatingControls.classList.add("minimized");
         minimizeBtn.textContent = "+";
@@ -224,7 +141,6 @@ window.onload = () => {
       }
     }
 
-    // Set up event listeners
     separationSlider.addEventListener("input", updateParams);
     alignmentSlider.addEventListener("input", updateParams);
     cohesionSlider.addEventListener("input", updateParams);
@@ -234,13 +150,11 @@ window.onload = () => {
     brushBtn1.addEventListener("click", setWallMode);
     brushBtn2.addEventListener("click", toggleBoidMode);
     foodBtn.addEventListener("click", setFoodMode);
-    clearWallsBtn.addEventListener("click", clearWalls);
+    clearWallsBtn.addEventListener("click", () => simulation.clearWalls());
     minimizeBtn.addEventListener("click", toggleMinimize);
 
-    // Initialize parameter display
     updateParams();
 
-    // Set boid spawner as the default active tool
     clearActiveBrushes();
     brushBtn2.classList.add("active");
     brushBtn2.title = "Boid Spawner Mode";
