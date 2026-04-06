@@ -1,12 +1,11 @@
-// Movement characteristic constants
-const PREY_STEERING_FACTOR = 1.6; // Higher value means prey turn more quickly
-const PREDATOR_STEERING_FACTOR = 0.9; // Improved from 0.7 - still slower than prey but better hunting ability
-const PREY_MAX_SPEED = 3.2; // Slightly lower max speed for prey
-const PREDATOR_MAX_SPEED = 4.5; // Higher max speed for predators
+const PREY_STEERING_FACTOR = 1.6;
+const PREDATOR_STEERING_FACTOR = 0.9;
+const PREY_MAX_SPEED = 3.2;
+const PREDATOR_MAX_SPEED = 4.5;
 
 class Boid {
   constructor(x, y, canvas) {
-    this.id = Math.random().toString(36).substring(2, 15); // Add unique ID
+    this.id = Math.random().toString(36).substring(2, 15);
     this.position = {
       x: x,
       y: y,
@@ -19,169 +18,110 @@ class Boid {
       x: 0,
       y: 0,
     };
-    this.maxForce = 0.1; // Reduced from 0.2 for smoother steering
-    this.maxSpeed = 3.5; // Slightly reduced for better control
-    this.minSpeed = 1.0; // Ensure boids keep moving to prevent stalling
+    this.maxForce = 0.1;
+    this.maxSpeed = 3.5;
+    this.minSpeed = 1.0; // prevent stalling
     this.size = 5;
     this.canvas = canvas;
 
-    // Add previous velocity for smoothing
-    this.prevVelocity = {
-      x: 0,
-      y: 0,
-    };
+    this.prevVelocity = { x: 0, y: 0 };
+    this.prevPosition = { x: x, y: y };
 
-    // Add previous position for collision resolution
-    this.prevPosition = {
-      x: x,
-      y: y,
-    };
+    this.collisionRadius = this.size * 0.8;
+    this.restitution = 0.6;
 
-    // Add collision response properties
-    this.collisionRadius = this.size * 0.8; // Slightly smaller than visual size
-    this.restitution = 0.6; // Energy preserved after collision (bounce factor)
+    this.hue = Math.floor(Math.random() * 360);
+    this.baseColor = `hsl(${this.hue}, 100%, 50%)`;
 
-    // Add color properties
-    this.hue = Math.floor(Math.random() * 360); // Random hue between 0-359
-    this.baseColor = `hsl(${this.hue}, 100%, 50%)`; // Base HSL color with full saturation and medium lightness
-
-    // Normalize initial velocity
     const speed = Math.sqrt(
       this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
     );
     this.velocity.x = (this.velocity.x / speed) * this.maxSpeed * 0.5;
     this.velocity.y = (this.velocity.y / speed) * this.maxSpeed * 0.5;
 
-    this.isPredator = false; // Flag to identify predator boids
-    this.predatorDetectionRadius = 100; // How far prey can detect predators
-    this.preyDetectionRadius = 150; // How far predators can detect prey
-    this.predatorChaseStrength = 1.2; // How strongly predators chase prey
-    this.predatorFleeStrength = 2.0; // How strongly prey flee from predators
-    this.huntingCooldown = 0; // Cooldown timer for predator kills
+    this.isPredator = false;
+    this.predatorDetectionRadius = 100; // how far prey can detect predators
+    this.preyDetectionRadius = 150; // how far predators can detect prey
+    this.predatorChaseStrength = 1.2;
+    this.predatorFleeStrength = 2.0;
+    this.huntingCooldown = 0;
+    this.steeringFactor = 1.0;
 
-    // Add turning agility factor - prey turn faster than predators
-    this.steeringFactor = 1.0; // Base steering factor, will be adjusted based on predator status
+    this.health = this.isPredator ? 80 : 75;
+    this.maxHealth = this.isPredator ? 150 : 100;
+    this.healthDecayRate = this.isPredator ? 0.12 : 0.03;
+    this.killed = false;
 
-    // Predator/Prey system - health and reproduction
-    this.health = this.isPredator ? 80 : 75; // Prey start with slightly higher health (was 70)
-    this.maxHealth = this.isPredator ? 150 : 100; // Predators have higher max health
-    this.healthDecayRate = this.isPredator ? 0.12 : 0.03; // Reduce prey decay rate (was 0.05)
-    this.killed = false; // Flag to mark if this boid is killed
+    this.reproductionThreshold = this.isPredator ? 120 : 85;
+    this.reproductionCost = this.isPredator ? 60 : 50;
+    this.reproductionCooldown = this.isPredator ? 0 : 100;
+    this.readyToReproduce = false;
 
-    // Reproduction properties
-    this.reproductionThreshold = this.isPredator ? 120 : 85; // Lower prey threshold (was 90)
-    this.reproductionCost = this.isPredator ? 60 : 50; // Lower prey reproduction cost (was 60)
-    this.reproductionCooldown = this.isPredator ? 0 : 100; // Shorter initial cooldown for prey (was 120)
-    this.readyToReproduce = false; // Flag to indicate reproductive readiness
-
-    // Food properties
-    this.healthGainPerKill = 45; // Health gained when predator kills prey
-    this.foodGenerationRate = this.isPredator ? 0 : 0.04; // Increase prey health gain rate (was 0.01)
+    this.healthGainPerKill = 45;
+    this.foodGenerationRate = this.isPredator ? 0 : 0.04;
   }
 
-  // Update boid's position based on its velocity and acceleration
   update(timeScale = 1.0) {
-    // Store previous position for collision resolution
     this.prevPosition.x = this.position.x;
     this.prevPosition.y = this.position.y;
-
-    // Store previous velocity for smoothing
     this.prevVelocity.x = this.velocity.x;
     this.prevVelocity.y = this.velocity.y;
 
-    // Update velocity based on acceleration with damping
-    // Apply time scaling to ensure consistent movement speed regardless of frame rate
     this.velocity.x += this.acceleration.x * timeScale;
     this.velocity.y += this.acceleration.y * timeScale;
 
-    // Apply velocity smoothing by blending with previous velocity
-    const smoothingFactor = 0.3; // 0 = no smoothing, 1 = maximum smoothing
-    this.velocity.x =
-      this.velocity.x * (1 - smoothingFactor) +
-      this.prevVelocity.x * smoothingFactor;
-    this.velocity.y =
-      this.velocity.y * (1 - smoothingFactor) +
-      this.prevVelocity.y * smoothingFactor;
+    // Blend with previous velocity for smoothing
+    const smoothingFactor = 0.3;
+    this.velocity.x = this.velocity.x * (1 - smoothingFactor) + this.prevVelocity.x * smoothingFactor;
+    this.velocity.y = this.velocity.y * (1 - smoothingFactor) + this.prevVelocity.y * smoothingFactor;
 
-    // Calculate current speed
-    const speed = Math.sqrt(
-      this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
-    );
+    const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.y ** 2);
 
-    // Apply speed limits - both minimum and maximum
     if (speed > this.maxSpeed) {
       this.velocity.x = (this.velocity.x / speed) * this.maxSpeed;
       this.velocity.y = (this.velocity.y / speed) * this.maxSpeed;
     } else if (speed < this.minSpeed && speed > 0) {
-      // Only enforce minimum speed if the boid is actually moving
       this.velocity.x = (this.velocity.x / speed) * this.minSpeed;
       this.velocity.y = (this.velocity.y / speed) * this.minSpeed;
     }
 
-    // Calculate next position
     const nextX = this.position.x + this.velocity.x * timeScale;
     const nextY = this.position.y + this.velocity.y * timeScale;
 
-    // Check for wall collisions before updating position
-    if (this.checkWallCollision(nextX, nextY)) {
-      // Position has been updated in the collision handling
-    } else {
-      // No collision, update position as normal
+    if (!this.checkWallCollision(nextX, nextY)) {
       this.position.x = nextX;
       this.position.y = nextY;
     }
 
-    // Reset acceleration
     this.acceleration.x = 0;
     this.acceleration.y = 0;
 
-    // Wrap around edges
     this.edges();
 
-    // Decrement hunting cooldown if it exists
-    if (this.huntingCooldown > 0) {
-      this.huntingCooldown -= timeScale;
-    }
+    if (this.huntingCooldown > 0) this.huntingCooldown -= timeScale;
+    if (this.reproductionCooldown > 0) this.reproductionCooldown -= timeScale;
 
-    // Decrement reproduction cooldown if it exists
-    if (this.reproductionCooldown > 0) {
-      this.reproductionCooldown -= timeScale;
-    }
-
-    // Process health mechanics - decay and food
     this.updateHealth(timeScale);
-
-    // Check for reproduction possibility
     this.checkReproduction();
   }
 
-  // Update boid health - handles health decay and food generation
   updateHealth(timeScale) {
-    // Apply health decay over time
     this.health -= this.healthDecayRate * timeScale;
 
-    // Prey slowly generate health by "grazing"
     if (!this.isPredator) {
       this.health += this.foodGenerationRate * timeScale;
     }
 
-    // Cap health at maximum
     if (this.health > this.maxHealth) {
       this.health = this.maxHealth;
     }
 
-    // Mark as dead if health reaches zero
     if (this.health <= 0) {
       this.killed = true;
     }
   }
 
-  // Check if the boid can reproduce
   checkReproduction() {
-    // Only reproduce if:
-    // 1. Not on cooldown
-    // 2. Has enough health
-    // 3. Not already marked as ready to reproduce
     if (
       this.reproductionCooldown <= 0 &&
       this.health >= this.reproductionThreshold &&
@@ -193,35 +133,23 @@ class Boid {
     }
   }
 
-  // Handle reproduction - creates a new boid
   reproduce() {
-    // Can only reproduce if ready flag is set
     if (!this.readyToReproduce) {
       return null;
     }
 
-    // Deduct reproduction cost from health
     this.health -= this.reproductionCost;
-
-    // Reset reproduction flag and start cooldown
     this.readyToReproduce = false;
-    this.reproductionCooldown = this.isPredator ? 300 : 150; // Predators have longer cooldown
+    this.reproductionCooldown = this.isPredator ? 300 : 150;
 
-    // Create a new boid of the same type at a slightly offset position
-    const offsetX = (Math.random() - 0.5) * 10;
-    const offsetY = (Math.random() - 0.5) * 10;
-
-    // Initialize offspring
     const offspring = new Boid(
-      this.position.x + offsetX,
-      this.position.y + offsetY,
+      this.position.x + (Math.random() - 0.5) * 10,
+      this.position.y + (Math.random() - 0.5) * 10,
       this.canvas
     );
 
-    // Child inherits parent's predator status
     offspring.isPredator = this.isPredator;
 
-    // Update properties based on predator status
     if (offspring.isPredator) {
       offspring.health = 80;
       offspring.maxHealth = 150;
@@ -229,54 +157,40 @@ class Boid {
       offspring.reproductionThreshold = 120;
       offspring.reproductionCost = 60;
       offspring.foodGenerationRate = 0;
-
-      // Inherit predator movement characteristics
-      offspring.maxSpeed = PREDATOR_MAX_SPEED; // Higher max speed for predators
-      offspring.steeringFactor = PREDATOR_STEERING_FACTOR; // Lower steering factor for predators (turn more slowly)
+      offspring.maxSpeed = PREDATOR_MAX_SPEED;
+      offspring.steeringFactor = PREDATOR_STEERING_FACTOR;
     } else {
-      // Inherit prey movement characteristics
-      offspring.maxSpeed = PREY_MAX_SPEED; // Slightly lower max speed for prey
-      offspring.steeringFactor = PREY_STEERING_FACTOR; // Higher steering factor for prey (turn more quickly)
+      offspring.maxSpeed = PREY_MAX_SPEED;
+      offspring.steeringFactor = PREY_STEERING_FACTOR;
     }
 
-    // Return the new boid to be added to the simulation
     return offspring;
   }
 
-  // Check for wall collisions and handle them
   checkWallCollision(nextX, nextY, simulation) {
-    // Get the simulation object from the window if not provided
     if (!simulation && window.simulation) {
       simulation = window.simulation;
     }
-
-    // If there's no simulation available, we can't check for walls
     if (!simulation) return false;
 
-    // Check if the boid's next position would intersect a wall
     if (simulation.isPointNearWall(nextX, nextY, this.collisionRadius)) {
       this.handleWallCollision(simulation);
       return true;
     }
 
-    // Check for collisions along the path (for fast-moving boids)
-    const moveDistSq =
-      (nextX - this.position.x) * (nextX - this.position.x) +
-      (nextY - this.position.y) * (nextY - this.position.y);
-
-    // If the boid is moving fast enough to potentially skip over walls, check intermediate points
-    if (moveDistSq > this.collisionRadius * this.collisionRadius) {
-      const steps = Math.ceil(
-        Math.sqrt(moveDistSq) / (this.collisionRadius * 0.5)
-      );
+    // For fast-moving boids, check intermediate points to avoid tunnelling
+    const moveDistSq = (nextX - this.position.x) ** 2 + (nextY - this.position.y) ** 2;
+    if (moveDistSq > this.collisionRadius ** 2) {
+      const steps = Math.ceil(Math.sqrt(moveDistSq) / (this.collisionRadius * 0.5));
       const stepX = (nextX - this.position.x) / steps;
       const stepY = (nextY - this.position.y) / steps;
 
       for (let i = 1; i < steps; i++) {
-        const checkX = this.position.x + stepX * i;
-        const checkY = this.position.y + stepY * i;
-
-        if (simulation.isPointNearWall(checkX, checkY, this.collisionRadius)) {
+        if (simulation.isPointNearWall(
+          this.position.x + stepX * i,
+          this.position.y + stepY * i,
+          this.collisionRadius
+        )) {
           this.handleWallCollision(simulation);
           return true;
         }
@@ -286,67 +200,35 @@ class Boid {
     return false;
   }
 
-  // Handle collision with a wall
   handleWallCollision(simulation) {
-    // Get the normal vector from the wall
     const normal = simulation.getWallNormal(this.position.x, this.position.y);
+    const dot = this.velocity.x * normal.x + this.velocity.y * normal.y;
 
-    // Calculate reflection for velocity
-    const dotProduct = this.velocity.x * normal.x + this.velocity.y * normal.y;
+    // Reflect velocity: v' = v - 2(v·n)n
+    this.velocity.x = (this.velocity.x - 2 * dot * normal.x) * this.restitution;
+    this.velocity.y = (this.velocity.y - 2 * dot * normal.y) * this.restitution;
 
-    // Apply reflection formula: v' = v - 2(v·n)n
-    this.velocity.x = this.velocity.x - 2 * dotProduct * normal.x;
-    this.velocity.y = this.velocity.y - 2 * dotProduct * normal.y;
-
-    // Apply restitution (energy loss)
-    this.velocity.x *= this.restitution;
-    this.velocity.y *= this.restitution;
-
-    // Ensure minimum speed
-    const speed = Math.sqrt(
-      this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
-    );
-
+    const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.y ** 2);
     if (speed < this.minSpeed) {
-      // Normalize and scale to minimum speed
       this.velocity.x = (this.velocity.x / speed) * this.minSpeed;
       this.velocity.y = (this.velocity.y / speed) * this.minSpeed;
     }
 
-    // Move boid along the new direction slightly to prevent getting stuck
     this.position.x += this.velocity.x * 0.1;
     this.position.y += this.velocity.y * 0.1;
 
-    // Move boid away from the wall if it's still too close
-    if (
-      simulation.isPointNearWall(
-        this.position.x,
-        this.position.y,
-        this.collisionRadius
-      )
-    ) {
-      // Push the boid out along the normal vector
-      const pushDistance = this.collisionRadius + 1; // Extra 1px for safety
-      this.position.x += normal.x * pushDistance;
-      this.position.y += normal.y * pushDistance;
+    if (simulation.isPointNearWall(this.position.x, this.position.y, this.collisionRadius)) {
+      this.position.x += normal.x * (this.collisionRadius + 1);
+      this.position.y += normal.y * (this.collisionRadius + 1);
     }
   }
 
-  // Apply force to boid's acceleration with smoothing
   applyForce(force) {
-    // Apply steering factor based on predator/prey status
-    // Predators turn more slowly (lower steering factor)
-    const steeringMultiplier = this.steeringFactor;
-
-    // Apply force with gradual influence based on current acceleration
-    // and adjusted by the steering factor
-    this.acceleration.x += force.x * steeringMultiplier;
-    this.acceleration.y += force.y * steeringMultiplier;
+    this.acceleration.x += force.x * this.steeringFactor;
+    this.acceleration.y += force.y * this.steeringFactor;
   }
 
-  // Calculate separation force - steer to avoid crowding local flockmates
   separation(boids, separationFactor) {
-    // Dynamic perception radius based on local density
     const basePerceptionRadius = 30;
     const neighborCount = this.countNeighbors(boids, basePerceptionRadius);
     const perceptionRadius = basePerceptionRadius * (1 + neighborCount * 0.05);
@@ -362,11 +244,7 @@ class Boid {
         const dist = Math.sqrt(distSquared);
 
         if (dist < perceptionRadius) {
-          // Improved force calculation with smoother falloff
-          // Use inverse square law with squared distance for more natural behavior
           const force = 1 / Math.max(0.5, distSquared);
-
-          // Normalize the direction vector
           const distInv = dist > 0 ? 1 / dist : 0;
           steering.x += dx * distInv * force;
           steering.y += dy * distInv * force;
@@ -379,28 +257,17 @@ class Boid {
       steering.x /= total;
       steering.y /= total;
 
-      // Get magnitude of steering vector
-      const magnitude = Math.sqrt(
-        steering.x * steering.x + steering.y * steering.y
-      );
+      const magnitude = Math.sqrt(steering.x ** 2 + steering.y ** 2);
 
-      // Only normalize if vector is not too small
       if (magnitude > 0.001) {
         steering.x = (steering.x / magnitude) * this.maxSpeed;
         steering.y = (steering.y / magnitude) * this.maxSpeed;
 
-        // Subtract current velocity for smoother steering
         steering.x -= this.velocity.x;
         steering.y -= this.velocity.y;
 
-        // Limit the steering force with smoother curve at high densities
-        const steerMag = Math.sqrt(
-          steering.x * steering.x + steering.y * steering.y
-        );
-
-        // Use adaptive force limit based on neighbor count
-        const adaptiveForceLimit =
-          this.maxForce * (1 + Math.min(0.5, total / 30));
+        const steerMag = Math.sqrt(steering.x ** 2 + steering.y ** 2);
+        const adaptiveForceLimit = this.maxForce * (1 + Math.min(0.5, total / 30));
 
         if (steerMag > adaptiveForceLimit) {
           steering.x = (steering.x / steerMag) * adaptiveForceLimit;
@@ -409,24 +276,16 @@ class Boid {
       }
     }
 
-    // Apply separation factor with gradual scaling for dense groups
-    const scaledFactor = Math.min(
-      separationFactor * (1 + total * 0.02),
-      separationFactor * 1.5
-    );
+    const scaledFactor = Math.min(separationFactor * (1 + total * 0.02), separationFactor * 1.5);
     steering.x *= scaledFactor;
     steering.y *= scaledFactor;
 
     return steering;
   }
 
-  // Calculate alignment force - steer towards the average heading of local flockmates
   alignment(boids, alignmentFactor) {
-    // Dynamic perception radius that grows slightly with density
     const basePerceptionRadius = 50;
-    const perceptionRadius =
-      basePerceptionRadius *
-      (1 + this.countNeighbors(boids, basePerceptionRadius) * 0.01);
+    const perceptionRadius = basePerceptionRadius * (1 + this.countNeighbors(boids, basePerceptionRadius) * 0.01);
 
     let steering = { x: 0, y: 0 };
     let total = 0;
@@ -449,22 +308,15 @@ class Boid {
       steering.x /= total;
       steering.y /= total;
 
-      // Set magnitude to maxSpeed
-      const magnitude = Math.sqrt(
-        steering.x * steering.x + steering.y * steering.y
-      );
+      const magnitude = Math.sqrt(steering.x ** 2 + steering.y ** 2);
       if (magnitude > 0) {
         steering.x = (steering.x / magnitude) * this.maxSpeed;
         steering.y = (steering.y / magnitude) * this.maxSpeed;
 
-        // Subtract current velocity to get steering force
         steering.x -= this.velocity.x;
         steering.y -= this.velocity.y;
 
-        // Limit the steering force
-        const steerMag = Math.sqrt(
-          steering.x * steering.x + steering.y * steering.y
-        );
+        const steerMag = Math.sqrt(steering.x ** 2 + steering.y ** 2);
         if (steerMag > this.maxForce) {
           steering.x = (steering.x / steerMag) * this.maxForce;
           steering.y = (steering.y / steerMag) * this.maxForce;
@@ -472,20 +324,16 @@ class Boid {
       }
     }
 
-    // Apply alignment factor
     steering.x *= alignmentFactor;
     steering.y *= alignmentFactor;
 
     return steering;
   }
 
-  // Calculate cohesion force - steer to move towards the average position of local flockmates
   cohesion(boids, cohesionFactor) {
-    // Dynamic perception radius that shrinks slightly with density to prevent over-grouping
     const basePerceptionRadius = 50;
     const neighborCount = this.countNeighbors(boids, basePerceptionRadius);
-    const perceptionRadius =
-      basePerceptionRadius * Math.max(0.5, 1 - neighborCount * 0.02);
+    const perceptionRadius = basePerceptionRadius * Math.max(0.5, 1 - neighborCount * 0.02);
 
     let steering = { x: 0, y: 0 };
     let center = { x: 0, y: 0 };
@@ -580,80 +428,59 @@ class Boid {
       y: cohesion.y * dynamicCohFactor,
     });
 
-    // Apply predator-prey behavior
     if (boids.length > 1) {
       if (this.isPredator) {
-        // Predators chase nearby prey
         this.chasePrey(boids);
       } else {
-        // Normal boids flee from predators
         this.fleeFromPredators(boids);
       }
     }
   }
 
-  // Food seeking method for prey
   seekFood(foodItems) {
     if (this.isPredator || foodItems.length === 0) return;
 
-    const foodDetectionRadius = 120; // How far prey can detect food
+    const foodDetectionRadius = 120;
     let nearestFood = null;
     let nearestDist = Infinity;
 
-    // Find nearest food within detection range
     for (const food of foodItems) {
       const dx = food.position.x - this.position.x;
       const dy = food.position.y - this.position.y;
       const distSquared = dx * dx + dy * dy;
 
-      if (distSquared < foodDetectionRadius * foodDetectionRadius && distSquared < nearestDist) {
+      if (distSquared < foodDetectionRadius ** 2 && distSquared < nearestDist) {
         nearestDist = distSquared;
         nearestFood = food;
       }
     }
 
-    // Apply attraction force to nearest food
     if (nearestFood) {
       const dx = nearestFood.position.x - this.position.x;
       const dy = nearestFood.position.y - this.position.y;
       const dist = Math.sqrt(nearestDist);
-
-      // Normalize direction and scale by attraction strength
       const attractionStrength = 0.8;
       const proximityFactor = Math.min(1, (foodDetectionRadius - dist) / foodDetectionRadius);
-      
-      const foodForce = {
+
+      this.applyForce({
         x: (dx / dist) * attractionStrength * proximityFactor,
         y: (dy / dist) * attractionStrength * proximityFactor,
-      };
-
-      this.applyForce(foodForce);
+      });
     }
   }
 
-  // Check for food collision and consume
   checkFoodCollision(foodItems) {
     if (this.isPredator) return null;
 
-    const consumeRadius = this.size + 4; // Collision radius for food consumption
-    const consumeRadiusSquared = consumeRadius * consumeRadius;
+    const consumeRadiusSq = (this.size + 4) ** 2;
 
     for (let i = 0; i < foodItems.length; i++) {
       const food = foodItems[i];
       const dx = food.position.x - this.position.x;
       const dy = food.position.y - this.position.y;
-      const distSquared = dx * dx + dy * dy;
 
-      if (distSquared < consumeRadiusSquared) {
-        // Consume the food - boost health and accelerate reproduction
-        this.health += food.nutritionValue;
-        
-        // Cap health at maximum
-        if (this.health > this.maxHealth) {
-          this.health = this.maxHealth;
-        }
-
-        // Return the index of consumed food for removal
+      if (dx * dx + dy * dy < consumeRadiusSq) {
+        this.health = Math.min(this.health + food.nutritionValue, this.maxHealth);
         return i;
       }
     }
@@ -661,53 +488,31 @@ class Boid {
     return null;
   }
 
-  // Wall avoidance method
   avoidWalls(simulation) {
-    // Wall detection parameters
-    const wallDetectionRadius = 20; // How far to look ahead for walls
-    const wallAvoidanceStrength = 2.0; // How strongly to avoid walls
-
-    // Look ahead based on current velocity
+    const wallDetectionRadius = 20;
+    const wallAvoidanceStrength = 2.0;
     const lookAheadX = this.position.x + this.velocity.x * 5;
     const lookAheadY = this.position.y + this.velocity.y * 5;
 
-    // Check if the boid is near any wall
-    if (
-      simulation.isPointNearWall(lookAheadX, lookAheadY, wallDetectionRadius)
-    ) {
-      // Get the normal vector to the closest wall
+    if (simulation.isPointNearWall(lookAheadX, lookAheadY, wallDetectionRadius)) {
       const normal = simulation.getWallNormal(lookAheadX, lookAheadY);
-
-      // Calculate distance to nearest wall point (approximate)
       const dx = lookAheadX - this.position.x;
       const dy = lookAheadY - this.position.y;
-      const distToWall = Math.sqrt(dx * dx + dy * dy); // This is an approximation
+      const distToWall = Math.sqrt(dx * dx + dy * dy);
+      const avoidanceForce = Math.min(30, wallDetectionRadius / Math.max(5, distToWall));
 
-      // Calculate avoidance force (stronger when closer)
-      const avoidanceForce = Math.min(
-        30,
-        wallDetectionRadius / Math.max(5, distToWall)
-      );
-
-      // Create wall avoidance force vector
-      const wallForce = {
+      this.applyForce({
         x: normal.x * avoidanceForce * wallAvoidanceStrength,
         y: normal.y * avoidanceForce * wallAvoidanceStrength,
-      };
+      });
 
-      // Apply the wall avoidance force
-      this.applyForce(wallForce);
-
-      // If very close to wall, apply immediate corrective force
       if (simulation.isPointNearWall(this.position.x, this.position.y, 5)) {
-        // Stronger immediate avoidance
         this.velocity.x += normal.x * 0.5;
         this.velocity.y += normal.y * 0.5;
       }
     }
   }
 
-  // Cursor avoidance method
   avoidCursor(simulation) {
     // First check if cursor is even on the canvas
     if (simulation.cursorPosition.x < 0 || simulation.cursorPosition.y < 0) {
@@ -730,121 +535,81 @@ class Boid {
       const nx = -dx / distToCursor;
       const ny = -dy / distToCursor;
 
-      // Stronger force when closer to cursor (inverse square law)
-      const forceMagnitude =
-        5.0 * (simulation.cursorRadius / Math.max(10, distToCursor));
-
-      // Apply avoidance force with high priority
-      const force = {
-        x: nx * forceMagnitude * simulation.cursorAvoidStrength,
-        y: ny * forceMagnitude * simulation.cursorAvoidStrength,
-      };
+      const forceMagnitude = 5.0 * (simulation.cursorRadius / Math.max(10, distToCursor));
 
       this.applyForce({
-        x: force.x,
-        y: force.y,
+        x: nx * forceMagnitude * simulation.cursorAvoidStrength,
+        y: ny * forceMagnitude * simulation.cursorAvoidStrength,
       });
     }
   }
 
-  // Method for predators to chase prey
   chasePrey(boids) {
     if (!this.isPredator || this.huntingCooldown > 0) return;
 
     let nearestPreyDist = Infinity;
     let nearestPrey = null;
-    let chaseVector = { x: 0, y: 0 };
+    let chaseDir = { x: 0, y: 0 };
 
-    // Find the nearest prey
     for (const other of boids) {
-      if (other === this || other.isPredator) continue; // Skip self and other predators
+      if (other === this || other.isPredator) continue;
 
       const dx = other.position.x - this.position.x;
       const dy = other.position.y - this.position.y;
       const distSquared = dx * dx + dy * dy;
 
-      // Only consider prey within detection range
-      if (distSquared < this.preyDetectionRadius * this.preyDetectionRadius) {
-        if (distSquared < nearestPreyDist) {
-          nearestPreyDist = distSquared;
-          nearestPrey = other;
+      if (distSquared < this.preyDetectionRadius ** 2 && distSquared < nearestPreyDist) {
+        nearestPreyDist = distSquared;
+        nearestPrey = other;
 
-          // Calculate normalized direction vector to prey
-          const dist = Math.sqrt(distSquared);
-          if (dist > 0) {
-            chaseVector.x = dx / dist;
-            chaseVector.y = dy / dist;
-          }
+        const dist = Math.sqrt(distSquared);
+        if (dist > 0) {
+          chaseDir.x = dx / dist;
+          chaseDir.y = dy / dist;
         }
       }
     }
 
-    // If found prey, apply chase force
     if (nearestPrey) {
-      // Stronger chase force when closer to prey (inverse square law)
-      const chaseStrength =
-        this.predatorChaseStrength *
-        (1 +
-          (this.preyDetectionRadius - Math.sqrt(nearestPreyDist)) /
-            this.preyDetectionRadius);
+      const chaseStrength = this.predatorChaseStrength *
+        (1 + (this.preyDetectionRadius - Math.sqrt(nearestPreyDist)) / this.preyDetectionRadius);
 
       const chaseForce = {
-        x: chaseVector.x * this.maxSpeed * chaseStrength,
-        y: chaseVector.y * this.maxSpeed * chaseStrength,
+        x: chaseDir.x * this.maxSpeed * chaseStrength - this.velocity.x,
+        y: chaseDir.y * this.maxSpeed * chaseStrength - this.velocity.y,
       };
 
-      // Subtract current velocity to get steering force
-      chaseForce.x -= this.velocity.x;
-      chaseForce.y -= this.velocity.y;
-
-      // Limit the chase force
-      const forceMag = Math.sqrt(
-        chaseForce.x * chaseForce.x + chaseForce.y * chaseForce.y
-      );
+      const forceMag = Math.sqrt(chaseForce.x ** 2 + chaseForce.y ** 2);
       if (forceMag > this.maxForce * 2) {
-        // Allow stronger chase forces
         chaseForce.x = (chaseForce.x / forceMag) * this.maxForce * 2;
         chaseForce.y = (chaseForce.y / forceMag) * this.maxForce * 2;
       }
 
-      // Apply the chase force
       this.applyForce(chaseForce);
-
-      // Check for collision with prey
       this.checkPreyCollision(nearestPrey, nearestPreyDist);
     }
   }
 
-  // Method for normal boids to flee from predators
   fleeFromPredators(boids) {
-    if (this.isPredator) return; // Only prey flee
+    if (this.isPredator) return;
 
     let fleeVector = { x: 0, y: 0 };
     let nearestPredatorDist = Infinity;
     let predatorCount = 0;
 
-    // Check all nearby predators
     for (const other of boids) {
-      if (other === this || !other.isPredator) continue; // Skip self and non-predators
+      if (other === this || !other.isPredator) continue;
 
-      const dx = this.position.x - other.position.x; // Note: reversed direction - away from predator
+      const dx = this.position.x - other.position.x;
       const dy = this.position.y - other.position.y;
       const distSquared = dx * dx + dy * dy;
 
-      // Only consider predators within detection range
-      if (
-        distSquared <
-        this.predatorDetectionRadius * this.predatorDetectionRadius
-      ) {
+      if (distSquared < this.predatorDetectionRadius ** 2) {
         predatorCount++;
 
-        // Normalize flee vector
         const dist = Math.sqrt(distSquared);
         if (dist > 0) {
-          // Weight: stronger response to closer predators
           const weight = 1 / Math.max(0.1, distSquared);
-
-          // Add to flee vector (weighted by inverse squared distance)
           fleeVector.x += (dx / dist) * weight;
           fleeVector.y += (dy / dist) * weight;
 
@@ -858,212 +623,113 @@ class Boid {
 
     // Apply flee force if predators are nearby
     if (predatorCount > 0) {
-      // Normalize the flee vector
-      const magnitude = Math.sqrt(
-        fleeVector.x * fleeVector.x + fleeVector.y * fleeVector.y
-      );
+      const magnitude = Math.sqrt(fleeVector.x ** 2 + fleeVector.y ** 2);
       if (magnitude > 0) {
-        // Scale by max speed and flee strength
-        fleeVector.x =
-          (fleeVector.x / magnitude) *
-          this.maxSpeed *
-          this.predatorFleeStrength;
-        fleeVector.y =
-          (fleeVector.y / magnitude) *
-          this.maxSpeed *
-          this.predatorFleeStrength;
+        fleeVector.x = (fleeVector.x / magnitude) * this.maxSpeed * this.predatorFleeStrength;
+        fleeVector.y = (fleeVector.y / magnitude) * this.maxSpeed * this.predatorFleeStrength;
 
-        // Subtract current velocity to get steering force
         fleeVector.x -= this.velocity.x;
         fleeVector.y -= this.velocity.y;
 
-        // Limit the flee force but allow it to be stronger than normal steering
-        const fleeMag = Math.sqrt(
-          fleeVector.x * fleeVector.x + fleeVector.y * fleeVector.y
-        );
+        const fleeMag = Math.sqrt(fleeVector.x ** 2 + fleeVector.y ** 2);
         if (fleeMag > this.maxForce * 3) {
-          // Allow stronger flee forces
           fleeVector.x = (fleeVector.x / fleeMag) * this.maxForce * 3;
           fleeVector.y = (fleeVector.y / fleeMag) * this.maxForce * 3;
         }
 
-        // Scale force by proximity - more urgent when predator is very close
-        const proximityFactor =
-          1 +
+        const proximityFactor = 1 +
           ((this.predatorDetectionRadius - Math.sqrt(nearestPredatorDist)) /
-            this.predatorDetectionRadius) *
-            2;
+            this.predatorDetectionRadius) * 2;
 
         fleeVector.x *= proximityFactor;
         fleeVector.y *= proximityFactor;
 
-        // Apply the flee force
         this.applyForce(fleeVector);
       }
     }
   }
 
-  // Check if this predator collides with prey
   checkPreyCollision(prey, distSquared) {
     if (!this.isPredator || this.huntingCooldown > 0 || !prey) return false;
 
-    // Collision radius is sum of both boid sizes
-    const collisionRadiusSq = Math.pow(this.size + prey.size, 2);
-
-    // If predator is touching prey, mark prey for death
-    if (distSquared <= collisionRadiusSq) {
+    if (distSquared <= (this.size + prey.size) ** 2) {
       prey.killed = true;
-
-      // Predator gains health from killing prey
-      this.health += this.healthGainPerKill;
-
-      // Cap health at maximum
-      if (this.health > this.maxHealth) {
-        this.health = this.maxHealth;
-      }
-
-      // Add cooldown to prevent immediate chasing of next prey
-      this.huntingCooldown = 30; // frames cooldown
-
+      this.health = Math.min(this.health + this.healthGainPerKill, this.maxHealth);
+      this.huntingCooldown = 30;
       return true;
     }
 
     return false;
   }
 
-  // Calculate color based on boid properties
   getColor() {
-    // Calculate health percentage for visual indicator
     const healthPercentage = this.health / this.maxHealth;
 
-    // Predator boids use a red hue
     if (this.isPredator) {
-      // Calculate current speed for saturation
-      const speed = Math.sqrt(
-        this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
-      );
-
-      // Normalize speed (0 to 1)
+      const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.y ** 2);
       const normalizedSpeed = Math.min(speed / this.maxSpeed, 1.0);
-
-      // Fixed hue for predators (red)
-      const hue = 0;
-
-      // Calculate saturation based on speed
       const saturation = 70 + normalizedSpeed * 30;
-
-      // Calculate lightness - use health percentage to impact lightness
-      // Healthy predators are bright, dying ones are dark
       const baseLight = 40 + (1 - this.position.y / this.canvas.logicalHeight) * 30;
       const lightness = healthPercentage * baseLight;
 
-      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      return `hsl(0, ${saturation}%, ${lightness}%)`;
     } else {
-      // Normal boid color calculation with health indicator
-      const speed = Math.sqrt(
-        this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
-      );
-
-      // Normalize speed (0 to 1)
+      const speed = Math.sqrt(this.velocity.x ** 2 + this.velocity.y ** 2);
       const normalizedSpeed = Math.min(speed / this.maxSpeed, 1.0);
-
-      // Calculate saturation based on speed
       const saturation = 30 + normalizedSpeed * 40;
-
-      // Apply a subtle hue shift based on horizontal position
-      const normalizedX = this.position.x / this.canvas.logicalWidth;
-      const hueShift = (normalizedX - 0.5) * 20; // -10 to +10 degree shift
+      const hueShift = (this.position.x / this.canvas.logicalWidth - 0.5) * 20;
       const adjustedHue = (this.hue + hueShift + 360) % 360;
-
-      // Health affects lightness - low health boids are darker
       const baseLight = 30 + (1 - this.position.y / this.canvas.logicalHeight) * 50;
       const lightness = healthPercentage * baseLight;
 
-      // Return the final HSL color
       return `hsl(${adjustedHue}, ${saturation}%, ${lightness}%)`;
     }
   }
 
-  // Count nearby neighbors for flock position awareness
   countNeighbors(boids, radius = 50) {
     let count = 0;
     for (const other of boids) {
       if (other !== this) {
         const dx = this.position.x - other.position.x;
         const dy = this.position.y - other.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < radius) {
-          count++;
-        }
+        if (Math.sqrt(dx * dx + dy * dy) < radius) count++;
       }
     }
     return count;
   }
 
-  // Draw the boid on the canvas with neighbor awareness
   draw(ctx, boids) {
-    // Save the current context state
     ctx.save();
-
-    // Translate to the boid's position
     ctx.translate(this.position.x, this.position.y);
+    ctx.rotate(Math.atan2(this.velocity.y, this.velocity.x));
 
-    // Rotate to match the boid's velocity direction
-    const angle = Math.atan2(this.velocity.y, this.velocity.x);
-    ctx.rotate(angle);
-
-    // Get dynamic color based on boid properties
-    let dynamicColor = this.getColor();
-
-    // Get neighbor count for size adjustment
+    const dynamicColor = this.getColor();
     const neighborCount = this.countNeighbors(boids);
     const sizeMultiplier = this.isPredator
-      ? 1.2 // Predators are slightly larger
-      : Math.min(1 + neighborCount / 20, 1.5); // Max 50% larger based on neighbor count
+      ? 1.2
+      : Math.min(1 + neighborCount / 20, 1.5);
 
-    // Draw the boid as a triangle with dynamic size
     ctx.beginPath();
     ctx.fillStyle = dynamicColor;
-
-    // Create path for the triangle
-    ctx.moveTo(this.size * 2 * sizeMultiplier, 0); // Nose
-    ctx.lineTo(-this.size * sizeMultiplier, this.size * sizeMultiplier); // Left tail
-    ctx.lineTo(-this.size * sizeMultiplier, -this.size * sizeMultiplier); // Right tail
+    ctx.moveTo(this.size * 2 * sizeMultiplier, 0);
+    ctx.lineTo(-this.size * sizeMultiplier, this.size * sizeMultiplier);
+    ctx.lineTo(-this.size * sizeMultiplier, -this.size * sizeMultiplier);
     ctx.closePath();
 
-    // Fill the triangle
     ctx.fill();
 
-    // Add a stroke - red for predators, subtle for normal boids
-    if (this.isPredator) {
-      ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
-      ctx.lineWidth = 1.5;
-    } else {
-      ctx.strokeStyle = dynamicColor;
-      ctx.lineWidth = 0.5;
-    }
+    ctx.strokeStyle = this.isPredator ? "rgba(255, 0, 0, 0.8)" : dynamicColor;
+    ctx.lineWidth = this.isPredator ? 1.5 : 0.5;
     ctx.lineJoin = "round";
     ctx.stroke();
 
-    // Add indicator for reproduction readiness
     if (this.readyToReproduce) {
-      // Draw a glowing circle around the boid to indicate it's ready to reproduce
       ctx.beginPath();
-
-      // Color based on predator status
-      if (this.isPredator) {
-        ctx.fillStyle = "rgba(255, 120, 120, 0.4)"; // Soft red glow for predators
-      } else {
-        ctx.fillStyle = "rgba(150, 255, 150, 0.4)"; // Soft green glow for prey
-      }
-
-      // Draw circle slightly larger than the boid
-      const glowRadius = this.size * 2.5 * sizeMultiplier;
-      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2);
+      ctx.fillStyle = this.isPredator ? "rgba(255, 120, 120, 0.4)" : "rgba(150, 255, 150, 0.4)";
+      ctx.arc(0, 0, this.size * 2.5 * sizeMultiplier, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Restore the context state
     ctx.restore();
   }
 }

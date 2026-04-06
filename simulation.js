@@ -2,29 +2,21 @@ import { Boid, PREY_MAX_SPEED, PREDATOR_MAX_SPEED, PREY_STEERING_FACTOR, PREDATO
 import { AudioEngine } from './audio.js';
 
 class Simulation {
-  /**
-   * @param {HTMLCanvasElement} canvas - The canvas element to render into.
-   * @param {object} [config={}]
-   */
   constructor(canvas, config = {}) {
     this.canvas = canvas;
     this.ctx = this.canvas.getContext("2d");
 
-    // Enable anti-aliasing for boids but not for walls
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "medium";
 
-    // Wall canvas is created lazily in init() because document.createElement
-    // is a DOM side-effect; set to null so tests that skip init() still work.
+    // wallCanvas is created in init() to keep the constructor free of DOM side-effects
     this.wallCanvas = null;
     this.wallCtx = null;
-    this.wallNeedsUpdate = true; // Flag to redraw walls only when needed
+    this.wallNeedsUpdate = true;
 
-    // Create a spatial index for walls to improve collision detection performance
     this.wallSpatialIndex = new Map();
-    this.gridCellSize = 20; // Size of each grid cell in the spatial index
+    this.gridCellSize = 20;
 
-    // Define cursor modes as an enum-like object
     this.CURSOR_MODES = {
       WALL: "WALL",
       ERASER: "ERASER",
@@ -33,132 +25,92 @@ class Simulation {
       FOOD: "FOOD",
     };
 
-    // Current cursor mode (default to WALL)
     this.cursorMode = this.CURSOR_MODES.WALL;
 
     this.boids = [];
-    this.food = []; // Array to store food items
+    this.food = [];
     this.running = true;
     this.separationFactor = 1.5;
     this.alignmentFactor = 1.0;
     this.cohesionFactor = 1.0;
 
-    // Apply device-specific configuration
     this.config = {
-      useHighPerformanceMode:
-        config.useHighPerformanceMode !== undefined
-          ? config.useHighPerformanceMode
-          : true,
       boidCount: config.boidCount !== undefined ? config.boidCount : 0,
       targetFPS: config.targetFPS || 60,
     };
 
-    // Add cursor tracking with more subtle parameters
-    this.cursorPosition = { x: -100, y: -100 }; // Start off-screen
-    this.cursorRadius = 20; // Reduced from 60 to 40
+    this.cursorPosition = { x: -100, y: -100 };
+    this.cursorRadius = 20;
     this.cursorAvoidStrength = 0.1;
-    this.touchActive = false; // Track if touch is currently active
+    this.touchActive = false;
 
-    // Wall drawing functionality
-    this.walls = []; // Array to store wall points
-    this.currentWall = null; // Current wall being drawn
-    this.wallBrushSize = 4; // Wall brush size in pixels
-    this.wallColor = "#ffffff"; // Wall color (white)
-    this.lastDrawPoint = null; // Last point where brush was drawn
-    this.minDrawDistance = 2; // For continuous walls
-    this.eraserSize = this.wallBrushSize * 3; // Size of eraser relative to brush size
+    this.walls = [];
+    this.currentWall = null;
+    this.wallBrushSize = 4;
+    this.wallColor = "#ffffff";
+    this.lastDrawPoint = null;
+    this.minDrawDistance = 2;
+    this.eraserSize = this.wallBrushSize * 3;
 
-    // Audio system initialization
     this.audioEngine = new AudioEngine();
-    this.audioEnabled = false; // Keep audio off by default
+    this.audioEnabled = false;
     this.audioTriggerCount = 0;
-    this.audioTriggerInterval = 8; // Trigger sound every N frames
+    this.audioTriggerInterval = 8;
 
-    // Add time tracking variables for frame-rate independence
     this.lastTime = 0;
     this.targetFPS = this.config.targetFPS;
-    this.timeStep = 1000 / this.targetFPS; // ms per update
+    this.timeStep = 1000 / this.targetFPS;
     this.accumulatedTime = 0;
   }
 
-  /**
-   * Wire up DOM event listeners, size the canvas, spawn initial boids, and
-   * start the animation loop.  Called by app.js after construction so that
-   * tests can construct a Simulation without triggering browser side-effects.
-   */
+  // Called by app.js after construction; keeps constructor free of DOM side-effects
   init() {
-    // Create the separate offscreen canvas for walls
     this.wallCanvas = document.createElement("canvas");
     this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
 
-    // Set cursor to crosshair by default
     this.canvas.style.cursor = "crosshair";
 
-    // Set canvas dimensions
     this.resizeCanvas();
-
-    // Create initial boids (now 0 by default)
     this.initBoids(this.config.boidCount);
-
-    // Set up drawing event listeners
     this.setupDrawing();
-
-    // Add cursor tracking listener
     this.setupCursorTracking();
-
-    // Prevent text selection on canvas to improve mobile experience
     this.preventTextSelection();
-
-    // Apply special handling for Safari/iOS devices
     this.applySafariOptimizations();
-
-    // Initialize the spatial index after walls are set up
     this.rebuildWallSpatialIndex();
-
-    // Start animation loop
     this.animate();
-    // Resize is handled by the app.js listener which calls handleResize()
   }
 
-  // Resize canvas to match its actual rendered CSS size
   resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
 
-    // Read the true rendered size from the DOM — this matches whatever CSS
-    // (100vw/100vh, zoom level, Safari URL bar, etc.) produces, rather than
-    // relying on window.innerWidth/Height which can differ.
+    // Read CSS-pixel size from DOM (accounts for zoom, Safari URL bar, etc.)
     const rect = this.canvas.getBoundingClientRect();
     const logicalWidth = rect.width;
     const logicalHeight = rect.height;
 
-    // Store logical dimensions on canvas so boids can read them
     this.canvas.logicalWidth = logicalWidth;
     this.canvas.logicalHeight = logicalHeight;
 
-    // Scale canvas buffer to physical pixels for crisp rendering on HiDPI screens
+    // Scale buffer to physical pixels for crisp HiDPI rendering
     this.canvas.width = Math.round(logicalWidth * dpr);
     this.canvas.height = Math.round(logicalHeight * dpr);
 
-    // Re-apply DPR scale and context settings (canvas resize resets all context state)
+    // Canvas resize resets all context state — re-apply settings
     this.ctx.scale(dpr, dpr);
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "medium";
 
-    // Wall canvas matches logical size — walls are solid fills and already look crisp
+    // Wall canvas stays at logical size (solid fills are crisp at 1:1)
     this.wallCanvas.width = Math.round(logicalWidth);
     this.wallCanvas.height = Math.round(logicalHeight);
-    this.wallNeedsUpdate = true; // Mark walls for redraw
+    this.wallNeedsUpdate = true;
 
-    // Rebuild spatial index when canvas size changes
     this.rebuildWallSpatialIndex();
   }
 
-  // Handle window resize events
   handleResize() {
-    // Resize the canvas buffer to match the new rendered size
     this.resizeCanvas();
 
-    // Keep boids within the new canvas bounds
     const w = this.canvas.logicalWidth;
     const h = this.canvas.logicalHeight;
     for (const boid of this.boids) {
@@ -167,69 +119,47 @@ class Simulation {
     }
   }
 
-  // Create a spatial index for more efficient wall collision detection
   rebuildWallSpatialIndex() {
     this.wallSpatialIndex.clear();
 
-    // Index all walls by grid cell
-    for (const wall of this.walls) {
-      for (const point of wall) {
-        const cellX = Math.floor(point.x / this.gridCellSize);
-        const cellY = Math.floor(point.y / this.gridCellSize);
-        const cellKey = `${cellX},${cellY}`;
+    const indexPoint = (point) => {
+      const cellKey = `${Math.floor(point.x / this.gridCellSize)},${Math.floor(point.y / this.gridCellSize)}`;
+      if (!this.wallSpatialIndex.has(cellKey)) this.wallSpatialIndex.set(cellKey, []);
+      this.wallSpatialIndex.get(cellKey).push(point);
+    };
 
-        if (!this.wallSpatialIndex.has(cellKey)) {
-          this.wallSpatialIndex.set(cellKey, []);
-        }
-        this.wallSpatialIndex.get(cellKey).push(point);
-      }
+    for (const wall of this.walls) {
+      for (const point of wall) indexPoint(point);
     }
 
-    // Also add the current wall being drawn
     if (this.currentWall) {
-      for (const point of this.currentWall) {
-        const cellX = Math.floor(point.x / this.gridCellSize);
-        const cellY = Math.floor(point.y / this.gridCellSize);
-        const cellKey = `${cellX},${cellY}`;
-
-        if (!this.wallSpatialIndex.has(cellKey)) {
-          this.wallSpatialIndex.set(cellKey, []);
-        }
-        this.wallSpatialIndex.get(cellKey).push(point);
-      }
+      for (const point of this.currentWall) indexPoint(point);
     }
   }
 
-  // Create initial boids
   initBoids(count) {
     this.boids = [];
 
-    // Define predator ratio - around 15% of boids should be predators
-    const predatorRatio = 0.15;
-    const predatorCount = Math.round(count * predatorRatio);
+    const predatorCount = Math.round(count * 0.15);
     const preyCount = count - predatorCount;
 
-    // Create prey boids
     for (let i = 0; i < preyCount; i++) {
-      const x = Math.random() * this.canvas.logicalWidth;
-      const y = Math.random() * this.canvas.logicalHeight;
-      const boid = new Boid(x, y, this.canvas);
-
-      // Set prey properties
-      boid.isPredator = false;
+      const boid = new Boid(
+        Math.random() * this.canvas.logicalWidth,
+        Math.random() * this.canvas.logicalHeight,
+        this.canvas
+      );
       boid.maxSpeed = PREY_MAX_SPEED;
       boid.steeringFactor = PREY_STEERING_FACTOR;
-
       this.boids.push(boid);
     }
 
-    // Create predator boids
     for (let i = 0; i < predatorCount; i++) {
-      const x = Math.random() * this.canvas.logicalWidth;
-      const y = Math.random() * this.canvas.logicalHeight;
-      const boid = new Boid(x, y, this.canvas);
-
-      // Set predator properties
+      const boid = new Boid(
+        Math.random() * this.canvas.logicalWidth,
+        Math.random() * this.canvas.logicalHeight,
+        this.canvas
+      );
       boid.isPredator = true;
       boid.health = 80;
       boid.maxHealth = 150;
@@ -237,85 +167,43 @@ class Simulation {
       boid.reproductionThreshold = 120;
       boid.reproductionCost = 60;
       boid.foodGenerationRate = 0;
-
-      // Make predators faster but with slower turning
       boid.maxSpeed = PREDATOR_MAX_SPEED;
       boid.steeringFactor = PREDATOR_STEERING_FACTOR;
-
       this.boids.push(boid);
     }
   }
 
-  // Reset the simulation
   reset() {
-    // Play death sounds for all existing boids if audio is enabled
-    if (
-      this.audioEnabled &&
-      this.audioEngine._initialized &&
-      this.boids.length > 0
-    ) {
-      // Get canvas dimensions for sound placement
-      const canvasWidth = this.canvas.logicalWidth;
-      const canvasHeight = this.canvas.logicalHeight;
-
-      // Store the current boids
-      const oldBoids = [...this.boids];
-
-      // Play death sounds for some boids (up to 8 randomly selected)
-      const maxSounds = Math.min(oldBoids.length, 8);
-      const selectedBoids = oldBoids
-        .sort(() => Math.random() - 0.5) // Shuffle array
-        .slice(0, maxSounds);
-
-      // Play the sounds with slight delays for a chorus of cries
-      selectedBoids.forEach((boid, index) => {
-        // Stagger the sounds slightly for a more chaotic effect
-        setTimeout(() => {
-          this.audioEngine.playDeathSound(
-            boid.position.x,
-            boid.position.y,
-            canvasWidth,
-            canvasHeight,
-            "player" // Add death cause: player reset the simulation
-          );
-        }, index * 60); // 60ms delay between each sound
-      });
+    if (this.audioEnabled && this.audioEngine._initialized && this.boids.length > 0) {
+      const { logicalWidth: w, logicalHeight: h } = this.canvas;
+      [...this.boids]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 8)
+        .forEach((boid, i) => {
+          setTimeout(() => {
+            this.audioEngine.playDeathSound(boid.position.x, boid.position.y, w, h, "player");
+          }, i * 60);
+        });
     }
 
-    // Clear food items
     this.food = [];
-
-    // Create new boids
     this.initBoids(this.config.boidCount);
   }
 
-  // Update parameters
   updateParams(separation, alignment, cohesion) {
     this.separationFactor = separation;
     this.alignmentFactor = alignment;
     this.cohesionFactor = cohesion;
   }
 
-  // Get accurate canvas coordinates from mouse event
   getCanvasCoordinates(e) {
     const rect = this.canvas.getBoundingClientRect();
-
-    // Use logical (CSS pixel) coordinates — the drawing context is already
-    // scaled by devicePixelRatio, so we work in CSS-pixel space throughout
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    return { x, y };
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  // Get accurate canvas coordinates from touch event
   getTouchCoordinates(touch) {
     const rect = this.canvas.getBoundingClientRect();
-
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-
-    return { x, y };
+    return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
   }
 
   getCursorMode() {
@@ -566,62 +454,32 @@ class Simulation {
     });
   }
 
-  // Add a point to the current wall
   addWallPoint(x, y) {
-    // Check if there's food at this position
     const checkRadius = Math.max(this.wallBrushSize * 2, 12);
-    if (this.isFoodNearPosition(x, y, checkRadius)) {
-      return; // Don't place walls on food
-    }
+    if (this.isFoodNearPosition(x, y, checkRadius)) return;
 
-    // Use circular brush pattern made up of small square tiles
     const pointSize = this.wallBrushSize;
-    const brushRadius = this.wallBrushSize * 1.5; // Circle radius slightly larger than tile size
+    const brushRadius = this.wallBrushSize * 1.5;
 
-    // Create a circular pattern of points around the cursor position
-    for (
-      let offsetX = -brushRadius;
-      offsetX <= brushRadius;
-      offsetX += pointSize
-    ) {
-      for (
-        let offsetY = -brushRadius;
-        offsetY <= brushRadius;
-        offsetY += pointSize
-      ) {
-        // Check if this offset point is within our circular brush
-        const distSq = offsetX * offsetX + offsetY * offsetY;
-        if (distSq <= brushRadius * brushRadius) {
-          this.currentWall.push({
-            x: x + offsetX,
-            y: y + offsetY,
-            size: pointSize,
-          });
+    for (let offsetX = -brushRadius; offsetX <= brushRadius; offsetX += pointSize) {
+      for (let offsetY = -brushRadius; offsetY <= brushRadius; offsetY += pointSize) {
+        if (offsetX * offsetX + offsetY * offsetY <= brushRadius * brushRadius) {
+          const px = x + offsetX;
+          const py = y + offsetY;
+          const point = { x: px, y: py, size: pointSize };
 
-          // Also add point to the spatial index
-          const pointX = x + offsetX;
-          const pointY = y + offsetY;
-          const cellX = Math.floor(pointX / this.gridCellSize);
-          const cellY = Math.floor(pointY / this.gridCellSize);
-          const cellKey = `${cellX},${cellY}`;
+          this.currentWall.push(point);
 
-          if (!this.wallSpatialIndex.has(cellKey)) {
-            this.wallSpatialIndex.set(cellKey, []);
-          }
-          this.wallSpatialIndex.get(cellKey).push({
-            x: pointX,
-            y: pointY,
-            size: pointSize,
-          });
+          const cellKey = `${Math.floor(px / this.gridCellSize)},${Math.floor(py / this.gridCellSize)}`;
+          if (!this.wallSpatialIndex.has(cellKey)) this.wallSpatialIndex.set(cellKey, []);
+          this.wallSpatialIndex.get(cellKey).push(point);
         }
       }
     }
 
-    // Update wall canvas immediately as points are added
     this.wallNeedsUpdate = true;
   }
 
-  // Toggle cursor mode
   setCursorMode(mode) {
     if (Object.values(this.CURSOR_MODES).includes(mode)) {
       this.cursorMode = mode;
@@ -629,7 +487,6 @@ class Simulation {
     }
   }
 
-  // Update cursor appearance based on current mode
   updateCursor() {
     switch (this.cursorMode) {
       case this.CURSOR_MODES.ERASER:
@@ -655,12 +512,10 @@ class Simulation {
     }
   }
 
-  // Spawn a new boid at the given coordinates
   spawnBoid(x, y, isPredator = false) {
     const newBoid = new Boid(x, y, this.canvas);
 
     if (isPredator) {
-      // Set predator properties
       newBoid.isPredator = true;
       newBoid.health = 80;
       newBoid.maxHealth = 150;
@@ -668,13 +523,9 @@ class Simulation {
       newBoid.reproductionThreshold = 120;
       newBoid.reproductionCost = 60;
       newBoid.foodGenerationRate = 0;
-
-      // Make predators faster but with slower turning
       newBoid.maxSpeed = PREDATOR_MAX_SPEED;
       newBoid.steeringFactor = PREDATOR_STEERING_FACTOR;
     } else {
-      // Set prey properties
-      newBoid.isPredator = false;
       newBoid.maxSpeed = PREY_MAX_SPEED;
       newBoid.steeringFactor = PREY_STEERING_FACTOR;
     }
@@ -687,276 +538,168 @@ class Simulation {
     newBoid.update(1.0);
   }
 
-  // Generate a random saturated color
   generateSaturatedColor() {
-    // Generate saturated colors by varying RGB components significantly
-    // One or two components will be high (200-255) while others can be lower (100-255)
-    // This creates vibrant colors with strong hues
     const hue = Math.random();
     let r, g, b;
 
     if (hue < 0.33) {
-      // Red-dominant vibrant colors
-      r = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
-      g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
-      b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      r = Math.floor(Math.random() * 56) + 200;
+      g = Math.floor(Math.random() * 156) + 100;
+      b = Math.floor(Math.random() * 156) + 100;
     } else if (hue < 0.66) {
-      // Green-dominant vibrant colors
-      r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
-      g = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
-      b = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
+      r = Math.floor(Math.random() * 156) + 100;
+      g = Math.floor(Math.random() * 56) + 200;
+      b = Math.floor(Math.random() * 156) + 100;
     } else {
-      // Blue-dominant vibrant colors
-      r = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
-      g = Math.floor(Math.random() * 156) + 100; // 100-255 (varied)
-      b = Math.floor(Math.random() * 56) + 200; // 200-255 (high)
+      r = Math.floor(Math.random() * 156) + 100;
+      g = Math.floor(Math.random() * 156) + 100;
+      b = Math.floor(Math.random() * 56) + 200;
     }
 
     return `rgba(${r}, ${g}, ${b}, 0.8)`;
   }
 
-  // Generate a glow color for the food
   generateGlowColor(baseColor) {
-    // Extract RGB values from the base color
     const match = baseColor.match(/rgba\((\d+), (\d+), (\d+), [\d.]+\)/);
     if (match) {
-      const r = parseInt(match[1]);
-      const g = parseInt(match[2]);
-      const b = parseInt(match[3]);
-      return `rgba(${r}, ${g}, ${b}, 0.3)`;
+      return `rgba(${match[1]}, ${match[2]}, ${match[3]}, 0.3)`;
     }
-    return "rgba(255, 255, 255, 0.3)"; // fallback
+    return "rgba(255, 255, 255, 0.3)";
   }
 
-  // Spawn a new food item at the given coordinates
   spawnFood(x, y) {
-    // Check if there's a wall at this position
-    const foodGlowRadius = 16; // Size * 4 for the glow rendering
-    if (this.isPointNearWall(x, y, foodGlowRadius)) {
-      return; // Don't spawn food on walls
-    }
+    if (this.isPointNearWall(x, y, 16)) return;
 
-    const color = this.generateSaturatedColor(); // Random saturated color
-    const newFood = {
-      position: { x: x, y: y },
-      size: 4, // Visual size of food
-      nutritionValue: 30, // Health boost when consumed
-      color: color,
-      glowColor: this.generateGlowColor(color), // Pre-compute glow color
-    };
-    this.food.push(newFood);
+    const color = this.generateSaturatedColor();
+    this.food.push({
+      position: { x, y },
+      size: 4,
+      nutritionValue: 30,
+      color,
+      glowColor: this.generateGlowColor(color),
+    });
   }
 
-  // Erase wall points and boids at the given coordinates
   eraseWallsAt(x, y) {
-    const eraseRadiusSquared = Math.pow(this.eraserSize, 2);
+    const eraseRadiusSquared = this.eraserSize ** 2;
     let wallsModified = false;
 
-    // Check each wall collection
     for (let w = 0; w < this.walls.length; w++) {
-      // Filter out points that are within the eraser radius
       const originalLength = this.walls[w].length;
       this.walls[w] = this.walls[w].filter((point) => {
         const dx = point.x - x;
         const dy = point.y - y;
-        const distSquared = dx * dx + dy * dy;
-
-        // Keep points that are outside eraser radius
-        return distSquared > eraseRadiusSquared;
+        return dx * dx + dy * dy > eraseRadiusSquared;
       });
-
-      // Check if we modified this wall
-      if (this.walls[w].length !== originalLength) {
-        wallsModified = true;
-      }
+      if (this.walls[w].length !== originalLength) wallsModified = true;
     }
 
-    // Remove any empty wall collections
     if (wallsModified) {
       this.walls = this.walls.filter((wall) => wall.length > 0);
-      this.wallNeedsUpdate = true; // Mark walls for redraw
-
-      // Rebuild the spatial index after erasing
+      this.wallNeedsUpdate = true;
       this.rebuildWallSpatialIndex();
     }
 
-    // Also remove any boids within the eraser radius
     const boidsRemoved = this.eraseBoids(x, y, eraseRadiusSquared);
-
-    // Also remove any food within the eraser radius
     const foodRemoved = this.eraseFood(x, y, eraseRadiusSquared);
 
     return wallsModified || boidsRemoved || foodRemoved;
   }
 
-  // Remove boids within the specified radius
   eraseBoids(x, y, radiusSquared) {
-    const originalLength = this.boids.length;
-
-    // Store boid positions before removal to use for death sound
     const removedBoids = [];
-
-    // Find which boids will be removed
-    this.boids.forEach((boid) => {
-      const dx = boid.position.x - x;
-      const dy = boid.position.y - y;
-      const distSquared = dx * dx + dy * dy;
-
-      if (distSquared <= radiusSquared) {
-        // Store position for sound effect
-        removedBoids.push({
-          x: boid.position.x,
-          y: boid.position.y,
-        });
-      }
-    });
-
-    // Filter out boids that are within the eraser radius
     this.boids = this.boids.filter((boid) => {
       const dx = boid.position.x - x;
       const dy = boid.position.y - y;
-      const distSquared = dx * dx + dy * dy;
-
-      // Keep boids that are outside the eraser radius
-      return distSquared > radiusSquared;
+      if (dx * dx + dy * dy <= radiusSquared) {
+        removedBoids.push(boid);
+        return false;
+      }
+      return true;
     });
 
-    // Play death sounds for removed boids if audio is enabled
-    if (
-      this.audioEnabled &&
-      removedBoids.length > 0 &&
-      this.audioEngine._initialized
-    ) {
-      // Play up to 3 death sounds to avoid overwhelming audio
+    if (this.audioEnabled && removedBoids.length > 0 && this.audioEngine._initialized) {
       const maxSounds = Math.min(removedBoids.length, 3);
-
       for (let i = 0; i < maxSounds; i++) {
-        const boid = removedBoids[i];
         this.audioEngine.playDeathSound(
-          boid.x,
-          boid.y,
+          removedBoids[i].position.x,
+          removedBoids[i].position.y,
           this.canvas.logicalWidth,
           this.canvas.logicalHeight,
-          "player" // Add death cause: player killed these boids with eraser
+          "player"
         );
       }
     }
 
-    // Return true if any boids were removed
-    return this.boids.length < originalLength;
+    return removedBoids.length > 0;
   }
 
-  // Remove food within the specified radius
   eraseFood(x, y, radiusSquared) {
     const originalLength = this.food.length;
-
-    // Filter out food that are within the eraser radius
     this.food = this.food.filter((food) => {
       const dx = food.position.x - x;
       const dy = food.position.y - y;
-      const distSquared = dx * dx + dy * dy;
-
-      // Keep food that are outside the eraser radius
-      return distSquared > radiusSquared;
+      return dx * dx + dy * dy > radiusSquared;
     });
-
-    // Return true if any food was removed
     return this.food.length < originalLength;
   }
 
-  // Clear all walls
   clearWalls() {
     this.walls = [];
-    this.wallSpatialIndex.clear(); // Clear the spatial index
-    this.wallNeedsUpdate = true; // Mark walls for redraw
+    this.wallSpatialIndex.clear();
+    this.wallNeedsUpdate = true;
   }
 
-  // Get wall points near a position using spatial indexing
   getWallPointsNearPosition(x, y, radius) {
     const cellRadius = Math.ceil(radius / this.gridCellSize);
-    const centerCellX = Math.floor(x / this.gridCellSize);
-    const centerCellY = Math.floor(y / this.gridCellSize);
+    const cx = Math.floor(x / this.gridCellSize);
+    const cy = Math.floor(y / this.gridCellSize);
     const nearbyPoints = [];
 
-    // Check cells in a square around the position
-    for (let offsetX = -cellRadius; offsetX <= cellRadius; offsetX++) {
-      for (let offsetY = -cellRadius; offsetY <= cellRadius; offsetY++) {
-        const cellKey = `${centerCellX + offsetX},${centerCellY + offsetY}`;
-
-        // Get points in this cell and add to our collection
-        if (this.wallSpatialIndex.has(cellKey)) {
-          nearbyPoints.push(...this.wallSpatialIndex.get(cellKey));
-        }
+    for (let ox = -cellRadius; ox <= cellRadius; ox++) {
+      for (let oy = -cellRadius; oy <= cellRadius; oy++) {
+        const cell = this.wallSpatialIndex.get(`${cx + ox},${cy + oy}`);
+        if (cell) nearbyPoints.push(...cell);
       }
     }
 
     return nearbyPoints;
   }
 
-  // Check if a point is close to a wall (for boid collision detection)
   isPointNearWall(x, y, radius) {
-    // Use spatial index to get nearby wall points
-    const nearbyPoints = this.getWallPointsNearPosition(
-      x,
-      y,
-      radius + this.wallBrushSize
-    );
-
-    // Check distance against each nearby point
+    const nearbyPoints = this.getWallPointsNearPosition(x, y, radius + this.wallBrushSize);
     for (const point of nearbyPoints) {
       const dx = x - point.x;
       const dy = y - point.y;
-      const distanceSquared = dx * dx + dy * dy;
-
-      // If the point is within the brush point radius plus the check radius
-      if (distanceSquared < Math.pow(point.size / 2 + radius * 0.6, 2)) {
-        return true;
-      }
+      if (dx * dx + dy * dy < (point.size / 2 + radius * 0.6) ** 2) return true;
     }
-
     return false;
   }
 
-  // Check if a point is close to food
   isFoodNearPosition(x, y, radius) {
     for (const food of this.food) {
       const dx = x - food.position.x;
       const dy = y - food.position.y;
-      const distanceSquared = dx * dx + dy * dy;
-      const foodRadius = food.size * 2; // Account for square rendering size
-
-      if (distanceSquared < Math.pow(foodRadius + radius, 2)) {
-        return true;
-      }
+      if (dx * dx + dy * dy < (food.size * 2 + radius) ** 2) return true;
     }
     return false;
   }
 
-  // Calculate normal vector away from nearest wall point
   getWallNormal(x, y) {
     let closestDistance = Infinity;
     let normal = { x: 0, y: 0 };
 
-    // Use spatial index to get nearby wall points
-    const nearbyPoints = this.getWallPointsNearPosition(x, y, 50); // 50 is a reasonable search radius
-
-    // Find the closest point and calculate normal
-    for (const point of nearbyPoints) {
-      // Calculate distance from point to wall point
+    for (const point of this.getWallPointsNearPosition(x, y, 50)) {
       const dx = x - point.x;
       const dy = y - point.y;
-      const distanceSquared = dx * dx + dy * dy;
+      const distSq = dx * dx + dy * dy;
 
-      // If this is the closest wall point so far
-      if (distanceSquared < closestDistance) {
-        closestDistance = distanceSquared;
-
-        // Normalize the vector away from the wall point
-        const distance = Math.sqrt(distanceSquared);
-        if (distance > 0) {
-          // Normal points away from the wall point
-          normal.x = dx / distance;
-          normal.y = dy / distance;
+      if (distSq < closestDistance) {
+        closestDistance = distSq;
+        const dist = Math.sqrt(distSq);
+        if (dist > 0) {
+          normal.x = dx / dist;
+          normal.y = dy / dist;
         }
       }
     }
@@ -964,31 +707,26 @@ class Simulation {
     return normal;
   }
 
-  // Track cursor position across the canvas
   setupCursorTracking() {
-    // Mouse tracking
     this.canvas.addEventListener("mousemove", (e) => {
       const coords = this.getCanvasCoordinates(e);
       this.cursorPosition.x = coords.x;
       this.cursorPosition.y = coords.y;
-      this.touchActive = false; // Mouse takes precedence over touch
+      this.touchActive = false;
     });
 
-    // Reset cursor position when mouse leaves canvas
     this.canvas.addEventListener("mouseleave", () => {
-      // Only reset if no touch is active
       if (!this.touchActive) {
         this.cursorPosition.x = -100;
         this.cursorPosition.y = -100;
       }
     });
 
-    // Also track when mouse enters canvas again
     this.canvas.addEventListener("mouseenter", (e) => {
       const coords = this.getCanvasCoordinates(e);
       this.cursorPosition.x = coords.x;
       this.cursorPosition.y = coords.y;
-      this.touchActive = false; // Mouse takes precedence
+      this.touchActive = false;
     });
 
     // Touch tracking for mobile devices - make boids dodge touch
@@ -1018,7 +756,6 @@ class Simulation {
         this.cursorPosition.y = -100;
         this.touchActive = false;
       } else {
-        // If there are still touches, use the first one
         const touch = e.touches[0];
         const coords = this.getTouchCoordinates(touch);
         this.cursorPosition.x = coords.x;
@@ -1036,248 +773,130 @@ class Simulation {
     });
   }
 
-  // Prevent text selection on canvas
   preventTextSelection() {
-    this.canvas.style.webkitUserSelect = "none"; // Safari
-    this.canvas.style.userSelect = "none"; // Standard
-    this.canvas.style.touchAction = "none"; // Disable browser handling of all touch events
-
-    // Prevent context menu on right click or long press
-    this.canvas.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-    });
+    this.canvas.style.webkitUserSelect = "none";
+    this.canvas.style.userSelect = "none";
+    this.canvas.style.touchAction = "none";
+    this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
-  // Check if a point is near the cursor with improved detection
-  isPointNearCursor(x, y, radius) {
-    // If cursor is off-screen, nothing is near it
-    if (this.cursorPosition.x < 0 || this.cursorPosition.y < 0) {
-      return false;
-    }
-
-    const dx = x - this.cursorPosition.x;
-    const dy = y - this.cursorPosition.y;
-    const distanceSquared = dx * dx + dy * dy;
-
-    // Calculate the effective radius (sum of cursor radius and check radius)
-    const effectiveRadius = this.cursorRadius + radius;
-
-    return distanceSquared < effectiveRadius * effectiveRadius;
-  }
-
-  // Get normal vector away from cursor
   getCursorNormal(x, y) {
     const dx = x - this.cursorPosition.x;
     const dy = y - this.cursorPosition.y;
-    const distanceSquared = dx * dx + dy * dy;
-    const distance = Math.sqrt(distanceSquared);
+    const distance = Math.sqrt(dx * dx + dy * dy);
 
-    // Return normalized vector pointing away from cursor
     if (distance > 0) {
-      return {
-        x: dx / distance,
-        y: dy / distance,
-      };
+      return { x: dx / distance, y: dy / distance };
     }
 
-    // Fallback if exactly at cursor position (unlikely)
     return { x: Math.random() - 0.5, y: Math.random() - 0.5 };
   }
 
-  // Apply optimizations specifically for Safari/iOS
   applySafariOptimizations() {
-    // Check if we're on iOS Safari
-    const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
     if (isIOS && isSafari) {
-      // iOS Safari specific optimizations
-      console.log("Applying Safari/iOS optimizations");
-
-      // Force high performance rendering mode
       this.canvas.style.transform = "translateZ(0)";
       this.canvas.style.backfaceVisibility = "hidden";
-
-      // Fix the time step for more consistent updates
-      this.timeStep = 16.666; // Lock to 60fps equivalent
+      this.timeStep = 16.666;
     }
   }
 
-  // Update all boids
   update(deltaTime) {
-    // Scale factor helps maintain consistent speed across different devices/framerates
     const timeScale = deltaTime / this.timeStep;
-
-    // Track boids that have been killed by predators
     const killedBoids = [];
-
-    // Track new boids created through reproduction
     const newBoids = [];
 
     for (const boid of this.boids) {
-      // Always apply cursor avoidance first if the method exists
-      if (typeof boid.avoidCursor === "function") {
-        boid.avoidCursor(this);
-      }
+      boid.avoidCursor(this);
 
-      // Apply wall avoidance forces (steering away from walls)
-      if (
-        this.walls.length > 0 ||
-        (this.currentWall && this.currentWall.length > 0)
-      ) {
+      if (this.walls.length > 0 || (this.currentWall && this.currentWall.length > 0)) {
         boid.avoidWalls(this);
       }
 
-      // Apply flocking behaviors
-      boid.flock(
-        this.boids,
-        this.separationFactor,
-        this.alignmentFactor,
-        this.cohesionFactor
-      );
+      boid.flock(this.boids, this.separationFactor, this.alignmentFactor, this.cohesionFactor);
 
-      // Apply food seeking behavior for prey
-      if (this.food.length > 0) {
-        boid.seekFood(this.food);
-      }
+      if (this.food.length > 0) boid.seekFood(this.food);
 
-      // Update boid position and apply true collision detection
       boid.update(timeScale);
 
-      // Check for food consumption
       if (this.food.length > 0) {
         const consumedFoodIndex = boid.checkFoodCollision(this.food);
-        if (consumedFoodIndex !== null) {
-          // Remove the consumed food
-          this.food.splice(consumedFoodIndex, 1);
-        }
+        if (consumedFoodIndex !== null) this.food.splice(consumedFoodIndex, 1);
       }
 
-      // Check if this boid has been killed
-      if (boid.killed) {
-        killedBoids.push(boid);
-      }
+      if (boid.killed) killedBoids.push(boid);
 
-      // Check for reproduction - if ready, create a new boid
       if (boid.readyToReproduce) {
         const offspring = boid.reproduce();
-        if (offspring) {
-          newBoids.push(offspring);
-        }
+        if (offspring) newBoids.push(offspring);
       }
     }
 
-    // Remove killed boids
     if (killedBoids.length > 0) {
-      // Play death sounds for killed boids if audio is enabled
       if (this.audioEnabled && this.audioEngine._initialized) {
-        // Play up to 2 death sounds to avoid overwhelming audio
         const maxSounds = Math.min(killedBoids.length, 2);
-
         for (let i = 0; i < maxSounds; i++) {
-          const boid = killedBoids[i];
           this.audioEngine.playDeathSound(
-            boid.position.x,
-            boid.position.y,
+            killedBoids[i].position.x,
+            killedBoids[i].position.y,
             this.canvas.logicalWidth,
             this.canvas.logicalHeight,
-            "predator" // Add death cause: these boids were killed by predators
+            "predator"
           );
         }
       }
-
-      // Filter out killed boids
       this.boids = this.boids.filter((boid) => !boid.killed);
     }
 
-    // Add any new boids created through reproduction
     if (newBoids.length > 0) {
-      // Optional: Add a sound for reproduction events if audio is enabled
-      if (
-        this.audioEnabled &&
-        this.audioEngine._initialized &&
-        newBoids.length > 0
-      ) {
-        // Just play one birth sound even if multiple births happened
-        const newBoid = newBoids[0];
-        // Use a different sound for births if available, or reuse another sound
-        // this.audioEngine.playBirthSound(newBoid.position.x, newBoid.position.y, this.canvas.width, this.canvas.height);
-      }
-
-      // Add the new boids to the simulation
       this.boids = this.boids.concat(newBoids);
     }
 
-    // Apply population controls
     this.applyPopulationControls();
 
-    // Process audio if enabled
     if (this.audioEnabled) {
       this.audioTriggerCount++;
       if (this.audioTriggerCount % this.audioTriggerInterval === 0) {
-        this.audioEngine.processBoids(
-          this.boids,
-          this.canvas,
-          this.audioTriggerCount
-        );
+        this.audioEngine.processBoids(this.boids, this.canvas, this.audioTriggerCount);
       }
     }
   }
 
-  // Population control system - maintains balance in the ecosystem
   applyPopulationControls() {
-    const maxBoids = 500; // Hard upper limit on total boids
-    const minPreyRatio = 0.6; // Minimum percentage of prey (60%)
-    const maxPredatorRatio = 0.3; // Maximum percentage of predators (30%)
-    const minPredators = 3; // Always keep a few predators
+    const maxBoids = 500;
+    const minPreyRatio = 0.6;
+    const maxPredatorRatio = 0.3;
+    const minPredators = 3;
 
-    // Count current populations
     let predatorCount = 0;
     let preyCount = 0;
-
     for (const boid of this.boids) {
-      if (boid.isPredator) {
-        predatorCount++;
-      } else {
-        preyCount++;
-      }
+      if (boid.isPredator) predatorCount++;
+      else preyCount++;
     }
 
     const totalBoids = predatorCount + preyCount;
 
-    // Check for overpopulation
     if (totalBoids > maxBoids) {
-      // Remove excess boids
       const excessBoids = totalBoids - maxBoids;
-      const killedPrey = [];
-      const killedPredators = [];
-
-      // Calculate current ratios
       const currentPredatorRatio = predatorCount / totalBoids;
       const currentPreyRatio = preyCount / totalBoids;
 
-      // Determine if we should remove predators or prey or both
       let predatorsToRemove = 0;
       let preyToRemove = 0;
 
       if (currentPredatorRatio > maxPredatorRatio) {
-        // Too many predators, remove more predators
         predatorsToRemove = Math.min(
           excessBoids,
-          predatorCount -
-            Math.max(minPredators, Math.floor(totalBoids * maxPredatorRatio))
+          predatorCount - Math.max(minPredators, Math.floor(totalBoids * maxPredatorRatio))
         );
         preyToRemove = excessBoids - predatorsToRemove;
-      } else if (
-        currentPreyRatio < minPreyRatio &&
-        predatorCount > minPredators
-      ) {
-        // Too few prey, remove more predators to restore balance
+      } else if (currentPreyRatio < minPreyRatio && predatorCount > minPredators) {
         predatorsToRemove = Math.min(excessBoids, predatorCount - minPredators);
         preyToRemove = excessBoids - predatorsToRemove;
       } else {
-        // Remove proportionally
         predatorsToRemove = Math.min(
           Math.floor(excessBoids * currentPredatorRatio),
           predatorCount - minPredators
@@ -1285,219 +904,120 @@ class Simulation {
         preyToRemove = excessBoids - predatorsToRemove;
       }
 
-      // Remove predators (oldest/weakest first)
       if (predatorsToRemove > 0) {
-        // Sort by health, remove weakest first
-        const predators = this.boids
-          .filter((b) => b.isPredator)
-          .sort((a, b) => a.health - b.health);
-
+        const predators = this.boids.filter((b) => b.isPredator).sort((a, b) => a.health - b.health);
         for (let i = 0; i < predatorsToRemove && i < predators.length; i++) {
           predators[i].killed = true;
-          killedPredators.push(predators[i]);
         }
       }
 
-      // Remove prey (oldest/weakest first)
       if (preyToRemove > 0) {
-        // Sort by health, remove weakest first
-        const prey = this.boids
-          .filter((b) => !b.isPredator)
-          .sort((a, b) => a.health - b.health);
-
+        const prey = this.boids.filter((b) => !b.isPredator).sort((a, b) => a.health - b.health);
         for (let i = 0; i < preyToRemove && i < prey.length; i++) {
           prey[i].killed = true;
-          killedPrey.push(prey[i]);
         }
       }
 
-      // Play death sounds for a sample of the killed boids if audio is enabled
-      // Removed death sounds for population control as requested
-      /*
-      if (this.audioEnabled && this.audioEngine._initialized) {
-        const maxSounds = 2;
-
-        // Play sound for a killed predator if any
-        if (killedPredators.length > 0) {
-          const predator = killedPredators[0];
-          this.audioEngine.playDeathSound(
-            predator.position.x,
-            predator.position.y,
-            this.canvas.width,
-            this.canvas.height
-          );
-        }
-
-        // Play sound for a killed prey if any
-        if (killedPrey.length > 0) {
-          const prey = killedPrey[0];
-          this.audioEngine.playDeathSound(
-            prey.position.x,
-            prey.position.y,
-            this.canvas.width,
-            this.canvas.height
-          );
-        }
-      }
-      */
-
-      // Remove killed boids
       this.boids = this.boids.filter((boid) => !boid.killed);
     }
   }
 
-  // Draw all boids and walls
   draw() {
-    // Clear canvas
     this.ctx.fillStyle = "#111";
     this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
 
-    // Redraw walls only if needed
     if (this.wallNeedsUpdate) {
-      this.wallCtx.clearRect(
-        0,
-        0,
-        this.wallCanvas.width,
-        this.wallCanvas.height
-      );
+      this.wallCtx.clearRect(0, 0, this.wallCanvas.width, this.wallCanvas.height);
       this.wallCtx.fillStyle = this.wallColor;
 
-      // Draw walls (collections of brush points)
       for (const wall of this.walls) {
         this.drawWallSegment(this.wallCtx, wall);
       }
 
-      // Draw current wall being drawn
       if (this.cursorMode === this.CURSOR_MODES.WALL && this.currentWall) {
         this.drawWallSegment(this.wallCtx, this.currentWall);
       }
 
-      this.wallNeedsUpdate = false; // Reset update flag
+      this.wallNeedsUpdate = false;
     }
 
-    // Draw walls from offscreen canvas — disable smoothing to keep walls crisp
-    // even on fractional devicePixelRatio devices (e.g. 1.5× Android)
+    // Disable smoothing when compositing walls to keep edges crisp on fractional DPR screens
     this.ctx.imageSmoothingEnabled = false;
     this.ctx.drawImage(this.wallCanvas, 0, 0);
     this.ctx.imageSmoothingEnabled = true;
 
-    // Draw food items
     for (const food of this.food) {
-      // Draw glow effect (larger square behind)
+      const glowSize = food.size * 4;
       this.ctx.fillStyle = food.glowColor;
-      const glowSize = food.size * 4; // 2x diameter for glow
-      this.ctx.fillRect(
-        food.position.x - glowSize / 2,
-        food.position.y - glowSize / 2,
-        glowSize,
-        glowSize
-      );
+      this.ctx.fillRect(food.position.x - glowSize / 2, food.position.y - glowSize / 2, glowSize, glowSize);
 
-      // Draw main food square
+      const foodSize = food.size * 2;
       this.ctx.fillStyle = food.color;
-      const foodSize = food.size * 2; // diameter as square size
-      this.ctx.fillRect(
-        food.position.x - foodSize / 2,
-        food.position.y - foodSize / 2,
-        foodSize,
-        foodSize
-      );
+      this.ctx.fillRect(food.position.x - foodSize / 2, food.position.y - foodSize / 2, foodSize, foodSize);
     }
 
-    // Draw each boid, passing the full boids array for neighbor awareness
     for (const boid of this.boids) {
       boid.draw(this.ctx, this.boids);
     }
   }
 
-  // Helper method to draw a wall segment with pixel-perfect appearance
   drawWallSegment(ctx, wallPoints) {
-    // Disable image smoothing for wall canvas to get crisp edges
     ctx.imageSmoothingEnabled = false;
 
-    // Group nearby points into clusters for more efficient rendering
-    const wallMap = new Map();
     const gridSize = Math.floor(this.wallBrushSize);
+    const wallMap = new Map();
 
-    // Create a grid-based map of wall points
     for (const point of wallPoints) {
-      // Snap to grid for crisp rendering
-      const gridX = Math.floor(point.x / gridSize) * gridSize;
-      const gridY = Math.floor(point.y / gridSize) * gridSize;
-      const key = `${gridX},${gridY}`;
-
-      if (!wallMap.has(key)) {
-        wallMap.set(key, { x: gridX, y: gridY });
-      }
+      const gx = Math.floor(point.x / gridSize) * gridSize;
+      const gy = Math.floor(point.y / gridSize) * gridSize;
+      const key = `${gx},${gy}`;
+      if (!wallMap.has(key)) wallMap.set(key, { x: gx, y: gy });
     }
 
-    // Draw crisp wall points
     for (const [_, point] of wallMap.entries()) {
-      // Draw as sharp-edged square
       ctx.fillRect(point.x, point.y, gridSize, gridSize);
     }
 
-    // If we're drawing the active wall segment, add a subtle glow effect
     if (wallPoints === this.currentWall && wallPoints.length > 0) {
-      // Enable smoothing just for the glow effect
       ctx.imageSmoothingEnabled = true;
-
-      // Add subtle highlight to show where user is drawing
       const lastPoint = wallPoints[wallPoints.length - 1];
       ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
       ctx.beginPath();
       ctx.arc(lastPoint.x, lastPoint.y, gridSize, 0, Math.PI * 2);
       ctx.fill();
-
-      // Reset to wall color
       ctx.fillStyle = this.wallColor;
     }
   }
 
-  // Main animation loop with time-based updates
+
   animate(currentTime = 0) {
-    // Calculate time elapsed since last frame
     const deltaTime = currentTime - this.lastTime;
     this.lastTime = currentTime;
 
-    // Accumulate time since last update
     this.accumulatedTime += deltaTime;
 
-    // Use a maximum frame time to prevent spiral of death on slow devices
-    const maxFrameTime = 200; // Cap at 5 FPS equivalent
-    if (this.accumulatedTime > maxFrameTime) {
-      this.accumulatedTime = maxFrameTime;
-    }
+    // Cap accumulated time to prevent spiral of death on slow devices
+    if (this.accumulatedTime > 200) this.accumulatedTime = 200;
 
-    // Update simulation at a fixed time step for consistency
     if (this.running) {
-      // Process all accumulated time in fixed time steps
       while (this.accumulatedTime >= this.timeStep) {
         this.update(this.timeStep);
         this.accumulatedTime -= this.timeStep;
       }
-
-      // Draw the current state
       this.draw();
     }
 
     requestAnimationFrame((time) => this.animate(time));
   }
 
-  // Toggle pause/resume
   togglePause() {
     this.running = !this.running;
   }
 
-  // Toggle audio on/off
   toggleAudio() {
-    // Initialize audio engine on first toggle if not already initialized
     if (!this.audioEngine._initialized && !this.audioEnabled) {
-      setTimeout(() => {
-        this.audioEngine.initialize();
-      }, 100);
+      setTimeout(() => this.audioEngine.initialize(), 100);
     }
-
     this.audioEnabled = this.audioEngine.toggle();
     return this.audioEnabled;
   }
