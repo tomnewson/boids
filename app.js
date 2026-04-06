@@ -1,3 +1,5 @@
+import { Simulation } from './simulation.js';
+
 window.onload = () => {
   // Debug info
   const canvas = document.getElementById("boids-canvas");
@@ -63,7 +65,8 @@ window.onload = () => {
 
   try {
     // Initialize simulation with device-specific configuration
-    const simulation = new Simulation("boids-canvas", deviceConfig);
+    const simulation = new Simulation(canvas, deviceConfig);
+    simulation.init();
     // Store in window object so resize handler can access it
     window.simulation = simulation;
 

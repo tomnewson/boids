@@ -123,10 +123,10 @@
     <!-- Regular stylesheet loads after for complete styling -->
     <link rel="stylesheet" href="styles.css" />
     <!-- Preload scripts to improve performance while ensuring CSS loads first -->
-    <link rel="preload" href="boid.js" as="script" />
-    <link rel="preload" href="audio.js" as="script" />
-    <link rel="preload" href="simulation.js" as="script" />
-    <link rel="preload" href="app.js" as="script" />
+    <link rel="modulepreload" href="boid.js" />
+    <link rel="modulepreload" href="audio.js" />
+    <link rel="modulepreload" href="simulation.js" />
+    <link rel="modulepreload" href="app.js" />
   </head>
   <body>
     <canvas id="boids-canvas"></canvas>
@@ -206,10 +206,7 @@
       <button id="food-btn" class="icon-btn" title="Place Food">🍎</button>
     </div>
 
-    <!-- Use defer to ensure CSS is loaded before scripts run -->
-    <script src="boid.js" defer></script>
-    <script src="audio.js" defer></script>
-    <script src="simulation.js" defer></script>
-    <script src="app.js" defer></script>
+    <!-- Entry point: module scripts are deferred automatically -->
+    <script type="module" src="app.js"></script>
   </body>
 </html>

@@ -1,15 +1,23 @@
+import { Boid, PREY_MAX_SPEED, PREDATOR_MAX_SPEED, PREY_STEERING_FACTOR, PREDATOR_STEERING_FACTOR } from './boid.js';
+import { AudioEngine } from './audio.js';
+
 class Simulation {
-  constructor(canvasId, config = {}) {
-    this.canvas = document.getElementById(canvasId);
+  /**
+   * @param {HTMLCanvasElement} canvas - The canvas element to render into.
+   * @param {object} [config={}]
+   */
+  constructor(canvas, config = {}) {
+    this.canvas = canvas;
     this.ctx = this.canvas.getContext("2d");
 
     // Enable anti-aliasing for boids but not for walls
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "medium";
 
-    // Create a separate offscreen canvas for walls with pixel-perfect rendering
-    this.wallCanvas = document.createElement("canvas");
-    this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
+    // Wall canvas is created lazily in init() because document.createElement
+    // is a DOM side-effect; set to null so tests that skip init() still work.
+    this.wallCanvas = null;
+    this.wallCtx = null;
     this.wallNeedsUpdate = true; // Flag to redraw walls only when needed
 
     // Create a spatial index for walls to improve collision detection performance
@@ -60,9 +68,6 @@ class Simulation {
     this.minDrawDistance = 2; // For continuous walls
     this.eraserSize = this.wallBrushSize * 3; // Size of eraser relative to brush size
 
-    // Set cursor to crosshair by default
-    this.canvas.style.cursor = "crosshair";
-
     // Audio system initialization
     this.audioEngine = new AudioEngine();
     this.audioEnabled = false; // Keep audio off by default
@@ -74,6 +79,20 @@ class Simulation {
     this.targetFPS = this.config.targetFPS;
     this.timeStep = 1000 / this.targetFPS; // ms per update
     this.accumulatedTime = 0;
+  }
+
+  /**
+   * Wire up DOM event listeners, size the canvas, spawn initial boids, and
+   * start the animation loop.  Called by app.js after construction so that
+   * tests can construct a Simulation without triggering browser side-effects.
+   */
+  init() {
+    // Create the separate offscreen canvas for walls
+    this.wallCanvas = document.createElement("canvas");
+    this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
+
+    // Set cursor to crosshair by default
+    this.canvas.style.cursor = "crosshair";
 
     // Set canvas dimensions
     this.resizeCanvas();
@@ -1483,3 +1502,5 @@ class Simulation {
     return this.audioEnabled;
   }
 }
+
+export { Simulation };
