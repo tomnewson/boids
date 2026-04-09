@@ -28,17 +28,14 @@ window.onload = () => {
     const floatingControls = document.querySelector(".floating-controls");
 
     const brushBtn1 = document.getElementById("brush-btn-1"); // WALL mode
-    const brushBtn2 = document.getElementById("brush-btn-2"); // BOID/PREDATOR mode
+    const brushBtn2 = document.getElementById("brush-btn-2"); // PREY mode
+    const brushBtn3 = document.getElementById("brush-btn-3"); // PREDATOR mode
     const foodBtn = document.getElementById("food-btn"); // FOOD mode
 
     let isMinimized = true;
     floatingControls.classList.add("minimized");
     minimizeBtn.textContent = "+";
     minimizeBtn.title = "Expand";
-
-    const buttonState = {
-      boidModePredator: false,
-    };
 
     function updateParams() {
       const separation = parseFloat(separationSlider.value);
@@ -83,6 +80,7 @@ window.onload = () => {
       eraserBtn.classList.remove("active");
       brushBtn1.classList.remove("active");
       brushBtn2.classList.remove("active");
+      brushBtn3.classList.remove("active");
       foodBtn.classList.remove("active");
     }
 
@@ -98,28 +96,16 @@ window.onload = () => {
       simulation.setCursorMode(simulation.CURSOR_MODES.WALL);
     }
 
-    function toggleBoidMode() {
+    function setPreyMode() {
       clearActiveBrushes();
       brushBtn2.classList.add("active");
+      simulation.setCursorMode(simulation.CURSOR_MODES.BOID);
+    }
 
-      const isSpawnerMode =
-        simulation.getCursorMode() === simulation.CURSOR_MODES.BOID ||
-        simulation.getCursorMode() === simulation.CURSOR_MODES.PREDATOR;
-
-      if (
-        (buttonState.boidModePredator && isSpawnerMode) ||
-        (!buttonState.boidModePredator && !isSpawnerMode)
-      ) {
-        simulation.setCursorMode(simulation.CURSOR_MODES.BOID);
-        buttonState.boidModePredator = false;
-        brushBtn2.textContent = "🧬";
-        brushBtn2.title = "Boid Spawner Mode";
-      } else {
-        simulation.setCursorMode(simulation.CURSOR_MODES.PREDATOR);
-        buttonState.boidModePredator = true;
-        brushBtn2.textContent = "🦅";
-        brushBtn2.title = "Predator Spawner Mode";
-      }
+    function setPredatorMode() {
+      clearActiveBrushes();
+      brushBtn3.classList.add("active");
+      simulation.setCursorMode(simulation.CURSOR_MODES.PREDATOR);
     }
 
     function setFoodMode() {
@@ -148,17 +134,15 @@ window.onload = () => {
     audioBtn.addEventListener("click", toggleAudio);
     eraserBtn.addEventListener("click", setEraserMode);
     brushBtn1.addEventListener("click", setWallMode);
-    brushBtn2.addEventListener("click", toggleBoidMode);
+    brushBtn2.addEventListener("click", setPreyMode);
+    brushBtn3.addEventListener("click", setPredatorMode);
     foodBtn.addEventListener("click", setFoodMode);
     clearWallsBtn.addEventListener("click", () => simulation.clearWalls());
     minimizeBtn.addEventListener("click", toggleMinimize);
 
     updateParams();
 
-    clearActiveBrushes();
-    brushBtn2.classList.add("active");
-    brushBtn2.title = "Boid Spawner Mode";
-    simulation.setCursorMode(simulation.CURSOR_MODES.BOID);
+    setPreyMode();
   } catch (error) {
     console.error("Error initializing simulation:", error);
   }
