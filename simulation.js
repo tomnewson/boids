@@ -235,6 +235,7 @@ class Simulation {
       switch (this.cursorMode) {
         case this.CURSOR_MODES.ERASER:
           this.eraseWallsAt(coords.x, coords.y);
+          this.eraseTrailAt(coords.x, coords.y);
           break;
         case this.CURSOR_MODES.BOID:
           this.spawnBoid(coords.x, coords.y);
@@ -260,6 +261,7 @@ class Simulation {
         switch (this.cursorMode) {
           case this.CURSOR_MODES.ERASER:
             this.eraseWallsAt(coords.x, coords.y);
+            this.eraseTrailAt(coords.x, coords.y);
             break;
           case this.CURSOR_MODES.BOID:
           case this.CURSOR_MODES.PREDATOR:
@@ -343,6 +345,7 @@ class Simulation {
       switch (this.cursorMode) {
         case this.CURSOR_MODES.ERASER:
           this.eraseWallsAt(coords.x, coords.y);
+          this.eraseTrailAt(coords.x, coords.y);
           this.lastDrawPoint = coords;
           break;
         case this.CURSOR_MODES.BOID:
@@ -389,6 +392,7 @@ class Simulation {
               const interpX = this.lastDrawPoint.x + dx * ratio;
               const interpY = this.lastDrawPoint.y + dy * ratio;
               this.eraseWallsAt(interpX, interpY);
+              this.eraseTrailAt(interpX, interpY);
             }
 
             this.lastDrawPoint = coords;
@@ -621,6 +625,31 @@ class Simulation {
     const foodRemoved = this.eraseFood(x, y, eraseRadiusSquared);
 
     return wallsModified || boidsRemoved || foodRemoved;
+  }
+
+  eraseTrailAt(x, y) {
+    if (!this.trailsEnabled) return;
+    const r = this.eraserSize;
+    const rx = x - r, ry = y - r, rw = r * 2, rh = r * 2;
+    this.ctx.fillStyle = '#111';
+    this.ctx.fillRect(rx, ry, rw, rh);
+    if (this.bgImage) {
+      const iw = this.bgImage.naturalWidth, ih = this.bgImage.naturalHeight;
+      const cw = this.canvas.logicalWidth,  ch = this.canvas.logicalHeight;
+      const srcAspect = iw / ih, dstAspect = cw / ch;
+      let sx, sy, sw, sh;
+      if (srcAspect > dstAspect) {
+        sh = ih; sw = sh * dstAspect; sx = (iw - sw) / 2; sy = 0;
+      } else {
+        sw = iw; sh = sw / dstAspect; sx = 0; sy = (ih - sh) / 2;
+      }
+      const scaleX = sw / cw, scaleY = sh / ch;
+      this.ctx.drawImage(
+        this.bgImage,
+        sx + rx * scaleX, sy + ry * scaleY, rw * scaleX, rh * scaleY,
+        rx, ry, rw, rh
+      );
+    }
   }
 
   eraseBoids(x, y, radiusSquared) {
