@@ -497,6 +497,39 @@ describe('Simulation.setBackgroundImage', () => {
   });
 });
 
+// ─── calcBgCrop ───────────────────────────────────────────────────────────────
+
+describe('Simulation.calcBgCrop', () => {
+  it('crops the sides when the image is wider than the canvas', () => {
+    const sim = makeSimulation(800, 600); // canvas aspect 4:3
+    sim.bgImage = { naturalWidth: 1600, naturalHeight: 600 }; // image aspect 8:3 — wider
+    const { sx, sy, sw, sh } = sim.calcBgCrop();
+    // Source height should equal image height, width cropped to match canvas aspect
+    expect(sh).toBe(600);
+    expect(sw).toBeCloseTo(1600 / 2); // canvas is 4:3, image is 8:3, so use half the width
+    expect(sy).toBe(0);
+    expect(sx).toBeGreaterThan(0); // centred horizontally
+  });
+
+  it('crops the top/bottom when the image is taller than the canvas', () => {
+    const sim = makeSimulation(800, 600); // canvas aspect 4:3
+    sim.bgImage = { naturalWidth: 800, naturalHeight: 1200 }; // image aspect 2:3 — taller
+    const { sx, sy, sw, sh } = sim.calcBgCrop();
+    expect(sw).toBe(800);
+    expect(sh).toBeCloseTo(800 * (600 / 800)); // sh = sw / dstAspect
+    expect(sx).toBe(0);
+    expect(sy).toBeGreaterThan(0); // centred vertically
+  });
+
+  it('returns scale factors matching src/dst ratio', () => {
+    const sim = makeSimulation(800, 600);
+    sim.bgImage = { naturalWidth: 800, naturalHeight: 600 }; // exact match
+    const { sw, sh, scaleX, scaleY } = sim.calcBgCrop();
+    expect(scaleX).toBeCloseTo(sw / 800);
+    expect(scaleY).toBeCloseTo(sh / 600);
+  });
+});
+
 // ─── toggleTrails ─────────────────────────────────────────────────────────────
 
 describe('Simulation.toggleTrails', () => {

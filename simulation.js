@@ -627,6 +627,21 @@ class Simulation {
     return wallsModified || boidsRemoved || foodRemoved;
   }
 
+  // Returns the cover-crop source rect and scale factors for this.bgImage onto
+  // the logical canvas. Only valid when this.bgImage is set.
+  calcBgCrop() {
+    const iw = this.bgImage.naturalWidth, ih = this.bgImage.naturalHeight;
+    const cw = this.canvas.logicalWidth,  ch = this.canvas.logicalHeight;
+    const srcAspect = iw / ih, dstAspect = cw / ch;
+    let sx, sy, sw, sh;
+    if (srcAspect > dstAspect) {
+      sh = ih; sw = sh * dstAspect; sx = (iw - sw) / 2; sy = 0;
+    } else {
+      sw = iw; sh = sw / dstAspect; sx = 0; sy = (ih - sh) / 2;
+    }
+    return { sx, sy, sw, sh, scaleX: sw / cw, scaleY: sh / ch };
+  }
+
   eraseTrailAt(x, y) {
     if (!this.trailsEnabled) return;
     const r = this.eraserSize;
@@ -634,21 +649,18 @@ class Simulation {
     this.ctx.fillStyle = '#111';
     this.ctx.fillRect(rx, ry, rw, rh);
     if (this.bgImage) {
-      const iw = this.bgImage.naturalWidth, ih = this.bgImage.naturalHeight;
-      const cw = this.canvas.logicalWidth,  ch = this.canvas.logicalHeight;
-      const srcAspect = iw / ih, dstAspect = cw / ch;
-      let sx, sy, sw, sh;
-      if (srcAspect > dstAspect) {
-        sh = ih; sw = sh * dstAspect; sx = (iw - sw) / 2; sy = 0;
-      } else {
-        sw = iw; sh = sw / dstAspect; sx = 0; sy = (ih - sh) / 2;
-      }
-      const scaleX = sw / cw, scaleY = sh / ch;
+      const { sx, sy, scaleX, scaleY } = this.calcBgCrop();
       this.ctx.drawImage(
         this.bgImage,
         sx + rx * scaleX, sy + ry * scaleY, rw * scaleX, rh * scaleY,
         rx, ry, rw, rh
       );
+    }
+    for (const food of this.food) {
+      if (food.position.x >= rx && food.position.x <= rx + rw &&
+          food.position.y >= ry && food.position.y <= ry + rh) {
+        food.glowDrawn = false;
+      }
     }
   }
 
@@ -973,20 +985,11 @@ class Simulation {
       this.ctx.fillStyle = "#111";
       this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
       if (this.bgImage) {
-        const iw = this.bgImage.naturalWidth, ih = this.bgImage.naturalHeight;
-        const cw = this.canvas.logicalWidth,  ch = this.canvas.logicalHeight;
-        const srcAspect = iw / ih, dstAspect = cw / ch;
-        let sx, sy, sw, sh;
-        if (srcAspect > dstAspect) {
-          sh = ih; sw = sh * dstAspect;
-          sx = (iw - sw) / 2; sy = 0;
-        } else {
-          sw = iw; sh = sw / dstAspect;
-          sx = 0; sy = (ih - sh) / 2;
-        }
-        this.ctx.drawImage(this.bgImage, sx, sy, sw, sh, 0, 0, cw, ch);
+        const { sx, sy, sw, sh } = this.calcBgCrop();
+        this.ctx.drawImage(this.bgImage, sx, sy, sw, sh, 0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
       }
       this.bgImageDirty = false;
+      for (const food of this.food) food.glowDrawn = false;
     }
 
     if (this.wallNeedsUpdate) {
