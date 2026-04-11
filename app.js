@@ -144,10 +144,23 @@ window.onload = () => {
     bgImageBtn.addEventListener("click", () => bgImageInput.click());
     bgImageInput.addEventListener("change", (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file) {
+        e.target.value = "";
+        return;
+      }
       const url = URL.createObjectURL(file);
       const img = new Image();
-      img.onload = () => simulation.setBackgroundImage(img);
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        e.target.value = "";
+      };
+      img.onload = () => {
+        simulation.setBackgroundImage(img);
+        cleanup();
+      };
+      img.onerror = () => {
+        cleanup();
+      };
       img.src = url;
     });
     trailsBtn.addEventListener("click", () => {
