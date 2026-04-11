@@ -24,6 +24,8 @@ window.onload = () => {
     const audioBtn = document.getElementById("audio-btn");
     const eraserBtn = document.getElementById("eraser-btn");
     const clearWallsBtn = document.getElementById("clear-walls-btn");
+    const bgImageBtn = document.getElementById("bg-image-btn");
+    const bgImageInput = document.getElementById("bg-image-input");
     const minimizeBtn = document.getElementById("minimize-btn");
     const floatingControls = document.querySelector(".floating-controls");
 
@@ -138,6 +140,15 @@ window.onload = () => {
     brushBtn3.addEventListener("click", setPredatorMode);
     foodBtn.addEventListener("click", setFoodMode);
     clearWallsBtn.addEventListener("click", () => simulation.clearWalls());
+    bgImageBtn.addEventListener("click", () => bgImageInput.click());
+    bgImageInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => simulation.setBackgroundImage(img);
+      img.src = url;
+    });
     minimizeBtn.addEventListener("click", toggleMinimize);
 
     updateParams();
