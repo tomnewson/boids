@@ -54,7 +54,9 @@ Drawing methods (`draw`, `drawWalls`) and the animation loop (`animate`) are **n
 
 ### Guidelines for new tests
 
+- **Always write unit tests alongside new logic.** Every new method or state change on `Simulation` or `Boid` that contains testable logic should have corresponding tests added in the same change.
 - Test **behaviour** (what a method does), not implementation details (how it does it).
 - For steering forces, assert **direction** (positive/negative x or y), not exact values — small floating-point changes from tuning should not break tests.
 - New methods that touch `ctx` or `wallCtx` should be split: keep the calculation in a pure helper that returns data, and keep the `ctx` calls in a thin renderer method. Test the helper, skip the renderer.
 - Do not add `requestAnimationFrame`, `document.createElement`, or Web Audio calls to the constructor — keep them in `init()` or dedicated methods so the constructor stays testable.
+- New constructor properties should have a corresponding default-value test in the `Simulation constructor` or `Boid constructor` describe block.

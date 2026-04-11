@@ -52,6 +52,10 @@ class Simulation {
     this.minDrawDistance = 2;
     this.eraserSize = this.wallBrushSize * 3;
 
+    this.bgImage = null;
+    this.bgImageDirty = false;
+    this.trailsEnabled = false;
+
     this.audioEngine = new AudioEngine();
     this.audioEnabled = false;
     this.audioTriggerCount = 0;
@@ -104,6 +108,7 @@ class Simulation {
     this.wallCanvas.width = Math.round(logicalWidth);
     this.wallCanvas.height = Math.round(logicalHeight);
     this.wallNeedsUpdate = true;
+    this.bgImageDirty = true;
 
     this.rebuildWallSpatialIndex();
   }
@@ -187,6 +192,7 @@ class Simulation {
     }
 
     this.food = [];
+    this.bgImageDirty = true;
     this.initBoids(this.config.boidCount);
   }
 
@@ -194,6 +200,16 @@ class Simulation {
     this.separationFactor = separation;
     this.alignmentFactor = alignment;
     this.cohesionFactor = cohesion;
+  }
+
+  setBackgroundImage(img) {
+    this.bgImage = img;
+    this.bgImageDirty = true;
+  }
+
+  toggleTrails() {
+    this.trailsEnabled = !this.trailsEnabled;
+    return this.trailsEnabled;
   }
 
   getCanvasCoordinates(e) {
@@ -219,6 +235,7 @@ class Simulation {
       switch (this.cursorMode) {
         case this.CURSOR_MODES.ERASER:
           this.eraseWallsAt(coords.x, coords.y);
+          this.eraseTrailAt(coords.x, coords.y);
           break;
         case this.CURSOR_MODES.BOID:
           this.spawnBoid(coords.x, coords.y);
@@ -244,6 +261,7 @@ class Simulation {
         switch (this.cursorMode) {
           case this.CURSOR_MODES.ERASER:
             this.eraseWallsAt(coords.x, coords.y);
+            this.eraseTrailAt(coords.x, coords.y);
             break;
           case this.CURSOR_MODES.BOID:
           case this.CURSOR_MODES.PREDATOR:
@@ -327,6 +345,7 @@ class Simulation {
       switch (this.cursorMode) {
         case this.CURSOR_MODES.ERASER:
           this.eraseWallsAt(coords.x, coords.y);
+          this.eraseTrailAt(coords.x, coords.y);
           this.lastDrawPoint = coords;
           break;
         case this.CURSOR_MODES.BOID:
@@ -373,6 +392,7 @@ class Simulation {
               const interpX = this.lastDrawPoint.x + dx * ratio;
               const interpY = this.lastDrawPoint.y + dy * ratio;
               this.eraseWallsAt(interpX, interpY);
+              this.eraseTrailAt(interpX, interpY);
             }
 
             this.lastDrawPoint = coords;
@@ -577,6 +597,7 @@ class Simulation {
       nutritionValue: 30,
       color,
       glowColor: this.generateGlowColor(color),
+      glowDrawn: false,
     });
   }
 
@@ -604,6 +625,43 @@ class Simulation {
     const foodRemoved = this.eraseFood(x, y, eraseRadiusSquared);
 
     return wallsModified || boidsRemoved || foodRemoved;
+  }
+
+  // Returns the cover-crop source rect and scale factors for this.bgImage onto
+  // the logical canvas. Only valid when this.bgImage is set.
+  calcBgCrop() {
+    const iw = this.bgImage.naturalWidth, ih = this.bgImage.naturalHeight;
+    const cw = this.canvas.logicalWidth,  ch = this.canvas.logicalHeight;
+    const srcAspect = iw / ih, dstAspect = cw / ch;
+    let sx, sy, sw, sh;
+    if (srcAspect > dstAspect) {
+      sh = ih; sw = sh * dstAspect; sx = (iw - sw) / 2; sy = 0;
+    } else {
+      sw = iw; sh = sw / dstAspect; sx = 0; sy = (ih - sh) / 2;
+    }
+    return { sx, sy, sw, sh, scaleX: sw / cw, scaleY: sh / ch };
+  }
+
+  eraseTrailAt(x, y) {
+    if (!this.trailsEnabled) return;
+    const r = this.eraserSize;
+    const rx = x - r, ry = y - r, rw = r * 2, rh = r * 2;
+    this.ctx.fillStyle = '#111';
+    this.ctx.fillRect(rx, ry, rw, rh);
+    if (this.bgImage) {
+      const { sx, sy, scaleX, scaleY } = this.calcBgCrop();
+      this.ctx.drawImage(
+        this.bgImage,
+        sx + rx * scaleX, sy + ry * scaleY, rw * scaleX, rh * scaleY,
+        rx, ry, rw, rh
+      );
+    }
+    for (const food of this.food) {
+      if (food.position.x >= rx && food.position.x <= rx + rw &&
+          food.position.y >= ry && food.position.y <= ry + rh) {
+        food.glowDrawn = false;
+      }
+    }
   }
 
   eraseBoids(x, y, radiusSquared) {
@@ -923,8 +981,16 @@ class Simulation {
   }
 
   draw() {
-    this.ctx.fillStyle = "#111";
-    this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
+    if (!this.trailsEnabled || this.bgImageDirty) {
+      this.ctx.fillStyle = "#111";
+      this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
+      if (this.bgImage) {
+        const { sx, sy, sw, sh } = this.calcBgCrop();
+        this.ctx.drawImage(this.bgImage, sx, sy, sw, sh, 0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
+      }
+      this.bgImageDirty = false;
+      for (const food of this.food) food.glowDrawn = false;
+    }
 
     if (this.wallNeedsUpdate) {
       this.wallCtx.clearRect(0, 0, this.wallCanvas.width, this.wallCanvas.height);
@@ -947,9 +1013,12 @@ class Simulation {
     this.ctx.imageSmoothingEnabled = true;
 
     for (const food of this.food) {
-      const glowSize = food.size * 4;
-      this.ctx.fillStyle = food.glowColor;
-      this.ctx.fillRect(food.position.x - glowSize / 2, food.position.y - glowSize / 2, glowSize, glowSize);
+      if (!this.trailsEnabled || !food.glowDrawn) {
+        const glowSize = food.size * 4;
+        this.ctx.fillStyle = food.glowColor;
+        this.ctx.fillRect(food.position.x - glowSize / 2, food.position.y - glowSize / 2, glowSize, glowSize);
+        food.glowDrawn = true;
+      }
 
       const foodSize = food.size * 2;
       this.ctx.fillStyle = food.color;

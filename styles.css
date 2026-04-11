@@ -140,6 +140,7 @@ span {
 /* Button container for buttons */
 .button-container {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
   margin-top: 10px;
@@ -147,6 +148,11 @@ span {
 }
 
 /* Circular icon buttons */
+.icon-btn,
+.text-btn {
+  touch-action: manipulation;
+}
+
 .icon-btn {
   width: 40px;
   height: 40px;

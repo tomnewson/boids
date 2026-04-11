@@ -100,6 +100,18 @@ describe('Simulation constructor', () => {
     expect(sim.cohesionFactor).toBe(1.0);
   });
 
+  it('starts with no background image', () => {
+    expect(makeSimulation().bgImage).toBeNull();
+  });
+
+  it('starts with bgImageDirty false', () => {
+    expect(makeSimulation().bgImageDirty).toBe(false);
+  });
+
+  it('starts with trails disabled', () => {
+    expect(makeSimulation().trailsEnabled).toBe(false);
+  });
+
   it('initialises CURSOR_MODES enum', () => {
     const sim = makeSimulation();
     expect(sim.CURSOR_MODES.WALL).toBe('WALL');
@@ -120,6 +132,15 @@ describe('Simulation constructor', () => {
 });
 
 // ─── updateParams ─────────────────────────────────────────────────────────────
+
+describe('Simulation.reset', () => {
+  it('marks bgImageDirty true to clear trails', () => {
+    const sim = makeSimulation();
+    sim.bgImageDirty = false;
+    sim.reset();
+    expect(sim.bgImageDirty).toBe(true);
+  });
+});
 
 describe('Simulation.updateParams', () => {
   it('updates all three factors', () => {
@@ -396,6 +417,12 @@ describe('Simulation.spawnFood', () => {
     sim.spawnFood(200, 200);
     expect(sim.food[0].nutritionValue).toBeGreaterThan(0);
   });
+
+  it('food starts with glowDrawn false', () => {
+    const sim = makeSimulation();
+    sim.spawnFood(200, 200);
+    expect(sim.food[0].glowDrawn).toBe(false);
+  });
 });
 
 // ─── applyPopulationControls ──────────────────────────────────────────────────
@@ -441,6 +468,93 @@ describe('Simulation.applyPopulationControls', () => {
     sim.applyPopulationControls();
     const predCount = sim.boids.filter((b) => b.isPredator).length;
     expect(predCount).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ─── setBackgroundImage ───────────────────────────────────────────────────────
+
+describe('Simulation.setBackgroundImage', () => {
+  it('sets bgImage to the provided image', () => {
+    const sim = makeSimulation();
+    const img = { naturalWidth: 1920, naturalHeight: 1080 };
+    sim.setBackgroundImage(img);
+    expect(sim.bgImage).toBe(img);
+  });
+
+  it('marks bgImageDirty true', () => {
+    const sim = makeSimulation();
+    sim.setBackgroundImage({ naturalWidth: 800, naturalHeight: 600 });
+    expect(sim.bgImageDirty).toBe(true);
+  });
+
+  it('replaces a previously set image', () => {
+    const sim = makeSimulation();
+    const first = { naturalWidth: 100, naturalHeight: 100 };
+    const second = { naturalWidth: 200, naturalHeight: 200 };
+    sim.setBackgroundImage(first);
+    sim.setBackgroundImage(second);
+    expect(sim.bgImage).toBe(second);
+  });
+});
+
+// ─── calcBgCrop ───────────────────────────────────────────────────────────────
+
+describe('Simulation.calcBgCrop', () => {
+  it('crops the sides when the image is wider than the canvas', () => {
+    const sim = makeSimulation(800, 600); // canvas aspect 4:3
+    sim.bgImage = { naturalWidth: 1600, naturalHeight: 600 }; // image aspect 8:3 — wider
+    const { sx, sy, sw, sh } = sim.calcBgCrop();
+    // Source height should equal image height, width cropped to match canvas aspect
+    expect(sh).toBe(600);
+    expect(sw).toBeCloseTo(1600 / 2); // canvas is 4:3, image is 8:3, so use half the width
+    expect(sy).toBe(0);
+    expect(sx).toBeGreaterThan(0); // centred horizontally
+  });
+
+  it('crops the top/bottom when the image is taller than the canvas', () => {
+    const sim = makeSimulation(800, 600); // canvas aspect 4:3
+    sim.bgImage = { naturalWidth: 800, naturalHeight: 1200 }; // image aspect 2:3 — taller
+    const { sx, sy, sw, sh } = sim.calcBgCrop();
+    expect(sw).toBe(800);
+    expect(sh).toBeCloseTo(800 * (600 / 800)); // sh = sw / dstAspect
+    expect(sx).toBe(0);
+    expect(sy).toBeGreaterThan(0); // centred vertically
+  });
+
+  it('returns scale factors matching src/dst ratio', () => {
+    const sim = makeSimulation(800, 600);
+    sim.bgImage = { naturalWidth: 800, naturalHeight: 600 }; // exact match
+    const { sw, sh, scaleX, scaleY } = sim.calcBgCrop();
+    expect(scaleX).toBeCloseTo(sw / 800);
+    expect(scaleY).toBeCloseTo(sh / 600);
+  });
+});
+
+// ─── toggleTrails ─────────────────────────────────────────────────────────────
+
+describe('Simulation.toggleTrails', () => {
+  it('enables trails when currently disabled', () => {
+    const sim = makeSimulation();
+    sim.toggleTrails();
+    expect(sim.trailsEnabled).toBe(true);
+  });
+
+  it('disables trails when currently enabled', () => {
+    const sim = makeSimulation();
+    sim.toggleTrails();
+    sim.toggleTrails();
+    expect(sim.trailsEnabled).toBe(false);
+  });
+
+  it('returns the new state after toggling on', () => {
+    const sim = makeSimulation();
+    expect(sim.toggleTrails()).toBe(true);
+  });
+
+  it('returns the new state after toggling off', () => {
+    const sim = makeSimulation();
+    sim.toggleTrails();
+    expect(sim.toggleTrails()).toBe(false);
   });
 });
 

@@ -24,6 +24,9 @@ window.onload = () => {
     const audioBtn = document.getElementById("audio-btn");
     const eraserBtn = document.getElementById("eraser-btn");
     const clearWallsBtn = document.getElementById("clear-walls-btn");
+    const bgImageBtn = document.getElementById("bg-image-btn");
+    const bgImageInput = document.getElementById("bg-image-input");
+    const trailsBtn = document.getElementById("trails-btn");
     const minimizeBtn = document.getElementById("minimize-btn");
     const floatingControls = document.querySelector(".floating-controls");
 
@@ -138,6 +141,32 @@ window.onload = () => {
     brushBtn3.addEventListener("click", setPredatorMode);
     foodBtn.addEventListener("click", setFoodMode);
     clearWallsBtn.addEventListener("click", () => simulation.clearWalls());
+    bgImageBtn.addEventListener("click", () => bgImageInput.click());
+    bgImageInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) {
+        e.target.value = "";
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        e.target.value = "";
+      };
+      img.onload = () => {
+        simulation.setBackgroundImage(img);
+        cleanup();
+      };
+      img.onerror = () => {
+        cleanup();
+      };
+      img.src = url;
+    });
+    trailsBtn.addEventListener("click", () => {
+      const enabled = simulation.toggleTrails();
+      trailsBtn.textContent = enabled ? "Trails: On" : "Trails: Off";
+    });
     minimizeBtn.addEventListener("click", toggleMinimize);
 
     updateParams();
