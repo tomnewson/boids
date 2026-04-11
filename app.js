@@ -26,6 +26,7 @@ window.onload = () => {
     const clearWallsBtn = document.getElementById("clear-walls-btn");
     const bgImageBtn = document.getElementById("bg-image-btn");
     const bgImageInput = document.getElementById("bg-image-input");
+    const trailsBtn = document.getElementById("trails-btn");
     const minimizeBtn = document.getElementById("minimize-btn");
     const floatingControls = document.querySelector(".floating-controls");
 
@@ -148,6 +149,10 @@ window.onload = () => {
       const img = new Image();
       img.onload = () => simulation.setBackgroundImage(img);
       img.src = url;
+    });
+    trailsBtn.addEventListener("click", () => {
+      const enabled = simulation.toggleTrails();
+      trailsBtn.textContent = enabled ? "Trails: On" : "Trails: Off";
     });
     minimizeBtn.addEventListener("click", toggleMinimize);
 
