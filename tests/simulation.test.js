@@ -133,6 +133,15 @@ describe('Simulation constructor', () => {
 
 // ─── updateParams ─────────────────────────────────────────────────────────────
 
+describe('Simulation.reset', () => {
+  it('marks bgImageDirty true to clear trails', () => {
+    const sim = makeSimulation();
+    sim.bgImageDirty = false;
+    sim.reset();
+    expect(sim.bgImageDirty).toBe(true);
+  });
+});
+
 describe('Simulation.updateParams', () => {
   it('updates all three factors', () => {
     const sim = makeSimulation();

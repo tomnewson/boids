@@ -192,6 +192,7 @@ class Simulation {
     }
 
     this.food = [];
+    this.bgImageDirty = true;
     this.initBoids(this.config.boidCount);
   }
 
