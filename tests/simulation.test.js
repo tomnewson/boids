@@ -100,6 +100,18 @@ describe('Simulation constructor', () => {
     expect(sim.cohesionFactor).toBe(1.0);
   });
 
+  it('starts with no background image', () => {
+    expect(makeSimulation().bgImage).toBeNull();
+  });
+
+  it('starts with bgImageDirty false', () => {
+    expect(makeSimulation().bgImageDirty).toBe(false);
+  });
+
+  it('starts with trails disabled', () => {
+    expect(makeSimulation().trailsEnabled).toBe(false);
+  });
+
   it('initialises CURSOR_MODES enum', () => {
     const sim = makeSimulation();
     expect(sim.CURSOR_MODES.WALL).toBe('WALL');
@@ -396,6 +408,12 @@ describe('Simulation.spawnFood', () => {
     sim.spawnFood(200, 200);
     expect(sim.food[0].nutritionValue).toBeGreaterThan(0);
   });
+
+  it('food starts with glowDrawn false', () => {
+    const sim = makeSimulation();
+    sim.spawnFood(200, 200);
+    expect(sim.food[0].glowDrawn).toBe(false);
+  });
 });
 
 // ─── applyPopulationControls ──────────────────────────────────────────────────
@@ -441,6 +459,60 @@ describe('Simulation.applyPopulationControls', () => {
     sim.applyPopulationControls();
     const predCount = sim.boids.filter((b) => b.isPredator).length;
     expect(predCount).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ─── setBackgroundImage ───────────────────────────────────────────────────────
+
+describe('Simulation.setBackgroundImage', () => {
+  it('sets bgImage to the provided image', () => {
+    const sim = makeSimulation();
+    const img = { naturalWidth: 1920, naturalHeight: 1080 };
+    sim.setBackgroundImage(img);
+    expect(sim.bgImage).toBe(img);
+  });
+
+  it('marks bgImageDirty true', () => {
+    const sim = makeSimulation();
+    sim.setBackgroundImage({ naturalWidth: 800, naturalHeight: 600 });
+    expect(sim.bgImageDirty).toBe(true);
+  });
+
+  it('replaces a previously set image', () => {
+    const sim = makeSimulation();
+    const first = { naturalWidth: 100, naturalHeight: 100 };
+    const second = { naturalWidth: 200, naturalHeight: 200 };
+    sim.setBackgroundImage(first);
+    sim.setBackgroundImage(second);
+    expect(sim.bgImage).toBe(second);
+  });
+});
+
+// ─── toggleTrails ─────────────────────────────────────────────────────────────
+
+describe('Simulation.toggleTrails', () => {
+  it('enables trails when currently disabled', () => {
+    const sim = makeSimulation();
+    sim.toggleTrails();
+    expect(sim.trailsEnabled).toBe(true);
+  });
+
+  it('disables trails when currently enabled', () => {
+    const sim = makeSimulation();
+    sim.toggleTrails();
+    sim.toggleTrails();
+    expect(sim.trailsEnabled).toBe(false);
+  });
+
+  it('returns the new state after toggling on', () => {
+    const sim = makeSimulation();
+    expect(sim.toggleTrails()).toBe(true);
+  });
+
+  it('returns the new state after toggling off', () => {
+    const sim = makeSimulation();
+    sim.toggleTrails();
+    expect(sim.toggleTrails()).toBe(false);
   });
 });
 
