@@ -26,8 +26,10 @@ window.onload = () => {
     const clearWallsBtn = document.getElementById("clear-walls-btn");
     const bgImageBtn = document.getElementById("bg-image-btn");
     const bgImageInput = document.getElementById("bg-image-input");
-    const trailsBtn = document.getElementById("trails-btn");
+    const trailLengthSlider = document.getElementById("trail-length");
+    const trailLengthValue = document.getElementById("trail-length-value");
     const minimizeBtn = document.getElementById("minimize-btn");
+    const MAX_TRAIL = Number.parseInt(trailLengthSlider.max, 10) || 120;
     const floatingControls = document.querySelector(".floating-controls");
 
     const brushBtn1 = document.getElementById("brush-btn-1"); // WALL mode
@@ -163,9 +165,11 @@ window.onload = () => {
       };
       img.src = url;
     });
-    trailsBtn.addEventListener("click", () => {
-      const enabled = simulation.toggleTrails();
-      trailsBtn.textContent = enabled ? "Trails: On" : "Trails: Off";
+    trailLengthSlider.addEventListener("input", () => {
+      const val = parseInt(trailLengthSlider.value);
+      const persist = val >= MAX_TRAIL;
+      trailLengthValue.textContent = persist ? "∞" : val;
+      simulation.setTrailLength(val, persist);
     });
     minimizeBtn.addEventListener("click", toggleMinimize);
 

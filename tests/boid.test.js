@@ -34,12 +34,10 @@ describe('Boid constructor', () => {
     expect(makeBoid().health).toBeGreaterThan(0);
   });
 
-  it('assigns a unique id', () => {
-    const a = makeBoid();
-    const b = makeBoid();
-    expect(a.id).toBeTruthy();
-    expect(a.id).not.toBe(b.id);
+  it('starts with an empty trail buffer', () => {
+    expect(makeBoid().trail).toEqual([]);
   });
+
 
   it('velocity magnitude is between minSpeed and maxSpeed after construction', () => {
     // Run a few times because velocity is randomised

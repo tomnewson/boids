@@ -5,7 +5,6 @@ const PREDATOR_MAX_SPEED = 4.5;
 
 class Boid {
   constructor(x, y, canvas) {
-    this.id = Math.random().toString(36).substring(2, 15);
     this.position = {
       x: x,
       y: y,
@@ -25,19 +24,19 @@ class Boid {
     this.canvas = canvas;
 
     this.prevVelocity = { x: 0, y: 0 };
-    this.prevPosition = { x: x, y: y };
 
     this.collisionRadius = this.size * 0.8;
     this.restitution = 0.6;
 
     this.hue = Math.floor(Math.random() * 360);
-    this.baseColor = `hsl(${this.hue}, 100%, 50%)`;
 
     const speed = Math.sqrt(
       this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y
     );
     this.velocity.x = (this.velocity.x / speed) * this.maxSpeed * 0.5;
     this.velocity.y = (this.velocity.y / speed) * this.maxSpeed * 0.5;
+
+    this.trail = [];
 
     this.isPredator = false;
     this.predatorDetectionRadius = 100; // how far prey can detect predators
@@ -62,8 +61,6 @@ class Boid {
   }
 
   update(timeScale = 1.0) {
-    this.prevPosition.x = this.position.x;
-    this.prevPosition.y = this.position.y;
     this.prevVelocity.x = this.velocity.x;
     this.prevVelocity.y = this.velocity.y;
 
