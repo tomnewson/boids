@@ -645,7 +645,8 @@ class Simulation {
   eraseTrailAt(x, y) {
     if (!this.trailsEnabled) return;
     const r = this.eraserSize;
-    const rx = x - r, ry = y - r, rw = r * 2, rh = r * 2;
+    const rx = Math.floor(x - r), ry = Math.floor(y - r);
+    const rw = Math.ceil(x + r) - rx, rh = Math.ceil(y + r) - ry;
     this.ctx.fillStyle = '#111';
     this.ctx.fillRect(rx, ry, rw, rh);
     if (this.bgImage) {
