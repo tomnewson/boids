@@ -53,8 +53,10 @@ class Simulation {
     this.eraserSize = this.wallBrushSize * 3;
 
     this.bgImage = null;
-    this.bgImageDirty = false;
-    this.trailsEnabled = false;
+    this.trailsPersist = false;
+    this.trailLength = 10;
+    this.trailCanvas = null;
+    this.trailCtx = null;
 
     this.audioEngine = new AudioEngine();
     this.audioEnabled = false;
@@ -71,6 +73,9 @@ class Simulation {
   init() {
     this.wallCanvas = document.createElement("canvas");
     this.wallCtx = this.wallCanvas.getContext("2d", { alpha: true });
+
+    this.trailCanvas = document.createElement("canvas");
+    this.trailCtx = this.trailCanvas.getContext("2d", { alpha: true });
 
     this.canvas.style.cursor = "crosshair";
 
@@ -108,7 +113,10 @@ class Simulation {
     this.wallCanvas.width = Math.round(logicalWidth);
     this.wallCanvas.height = Math.round(logicalHeight);
     this.wallNeedsUpdate = true;
-    this.bgImageDirty = true;
+
+    // Trail canvas at logical size; resize clears it (acceptable)
+    this.trailCanvas.width = Math.round(logicalWidth);
+    this.trailCanvas.height = Math.round(logicalHeight);
 
     this.rebuildWallSpatialIndex();
   }
@@ -192,7 +200,9 @@ class Simulation {
     }
 
     this.food = [];
-    this.bgImageDirty = true;
+    if (this.trailCanvas) {
+      this.trailCtx.clearRect(0, 0, this.trailCanvas.width, this.trailCanvas.height);
+    }
     this.initBoids(this.config.boidCount);
   }
 
@@ -204,12 +214,23 @@ class Simulation {
 
   setBackgroundImage(img) {
     this.bgImage = img;
-    this.bgImageDirty = true;
   }
 
-  toggleTrails() {
-    this.trailsEnabled = !this.trailsEnabled;
-    return this.trailsEnabled;
+  setTrailLength(length, persist) {
+    this.trailLength = length;
+    const wasPersisting = this.trailsPersist;
+    this.trailsPersist = persist;
+    // Immediately trim all boid trail buffers to the new length so existing
+    // trails shrink (or vanish) at once rather than draining one frame at a time.
+    const maxEntries = length * 2;
+    for (const boid of this.boids) {
+      if (boid.trail.length > maxEntries) {
+        boid.trail.splice(0, boid.trail.length - maxEntries);
+      }
+    }
+    if (wasPersisting && !persist && this.trailCanvas) {
+      this.trailCtx.clearRect(0, 0, this.trailCanvas.width, this.trailCanvas.height);
+    }
   }
 
   getCanvasCoordinates(e) {
@@ -597,7 +618,6 @@ class Simulation {
       nutritionValue: 30,
       color,
       glowColor: this.generateGlowColor(color),
-      glowDrawn: false,
     });
   }
 
@@ -643,25 +663,15 @@ class Simulation {
   }
 
   eraseTrailAt(x, y) {
-    if (!this.trailsEnabled) return;
-    const r = this.eraserSize;
-    const rx = Math.floor(x - r), ry = Math.floor(y - r);
-    const rw = Math.ceil(x + r) - rx, rh = Math.ceil(y + r) - ry;
-    this.ctx.fillStyle = '#111';
-    this.ctx.fillRect(rx, ry, rw, rh);
-    if (this.bgImage) {
-      const { sx, sy, scaleX, scaleY } = this.calcBgCrop();
-      this.ctx.drawImage(
-        this.bgImage,
-        sx + rx * scaleX, sy + ry * scaleY, rw * scaleX, rh * scaleY,
-        rx, ry, rw, rh
-      );
-    }
-    for (const food of this.food) {
-      if (food.position.x >= rx && food.position.x <= rx + rw &&
-          food.position.y >= ry && food.position.y <= ry + rh) {
-        food.glowDrawn = false;
-      }
+    // Only meaningful in persist mode; in non-persist mode the canvas is
+    // redrawn from position buffers every frame anyway.
+    if (this.trailsPersist && this.trailCanvas) {
+      this.trailCtx.save();
+      this.trailCtx.globalCompositeOperation = 'destination-out';
+      this.trailCtx.beginPath();
+      this.trailCtx.arc(x, y, this.eraserSize, 0, Math.PI * 2);
+      this.trailCtx.fill();
+      this.trailCtx.restore();
     }
   }
 
@@ -880,6 +890,10 @@ class Simulation {
 
       boid.update(timeScale);
 
+      // Record position for trail rendering (flat x,y pairs)
+      boid.trail.push(boid.position.x, boid.position.y);
+      if (boid.trail.length > this.trailLength * 2) boid.trail.splice(0, 2);
+
       if (this.food.length > 0) {
         const consumedFoodIndex = boid.checkFoodCollision(this.food);
         if (consumedFoodIndex !== null) this.food.splice(consumedFoodIndex, 1);
@@ -982,16 +996,66 @@ class Simulation {
   }
 
   draw() {
-    if (!this.trailsEnabled || this.bgImageDirty) {
-      this.ctx.fillStyle = "#111";
-      this.ctx.fillRect(0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
-      if (this.bgImage) {
-        const { sx, sy, sw, sh } = this.calcBgCrop();
-        this.ctx.drawImage(this.bgImage, sx, sy, sw, sh, 0, 0, this.canvas.logicalWidth, this.canvas.logicalHeight);
-      }
-      this.bgImageDirty = false;
-      for (const food of this.food) food.glowDrawn = false;
+    const w = this.canvas.logicalWidth;
+    const h = this.canvas.logicalHeight;
+
+    // Always clear and redraw background so walls/food/background are never stale
+    this.ctx.fillStyle = "#111";
+    this.ctx.fillRect(0, 0, w, h);
+    if (this.bgImage) {
+      const { sx, sy, sw, sh } = this.calcBgCrop();
+      this.ctx.drawImage(this.bgImage, sx, sy, sw, sh, 0, 0, w, h);
     }
+
+    // Trail canvas: boid trails only, always active.
+    // Use connected line segments so fast-moving boids (especially predators)
+    // have no gaps between recorded positions.
+    this.trailCtx.lineWidth = 2;
+    this.trailCtx.lineCap = 'round';
+    this.trailCtx.lineJoin = 'round';
+
+    // Threshold for detecting edge-wrap teleports: a jump larger than half the
+    // canvas in either axis cannot be real movement, so skip that segment.
+    const halfW = this.trailCanvas.width / 2;
+    const halfH = this.trailCanvas.height / 2;
+
+    if (this.trailsPersist) {
+      // Accumulate: draw one new segment per boid per frame, never clear
+      for (const boid of this.boids) {
+        const pts = boid.trail;
+        if (pts.length < 4) continue;
+        const x0 = pts[pts.length - 4], y0 = pts[pts.length - 3];
+        const x1 = pts[pts.length - 2], y1 = pts[pts.length - 1];
+        if (Math.abs(x1 - x0) > halfW || Math.abs(y1 - y0) > halfH) continue;
+        this.trailCtx.strokeStyle = boid.getColor();
+        this.trailCtx.beginPath();
+        this.trailCtx.moveTo(x0, y0);
+        this.trailCtx.lineTo(x1, y1);
+        this.trailCtx.stroke();
+      }
+    } else {
+      // Redraw full trail history from position buffers each frame.
+      // Each segment drawn at increasing opacity: oldest → transparent, newest → opaque.
+      this.trailCtx.clearRect(0, 0, this.trailCanvas.width, this.trailCanvas.height);
+      for (const boid of this.boids) {
+        const pts = boid.trail;
+        const len = pts.length / 2;
+        if (len < 2) continue;
+        this.trailCtx.strokeStyle = boid.getColor();
+        for (let i = 1; i < len; i++) {
+          const x0 = pts[(i - 1) * 2], y0 = pts[(i - 1) * 2 + 1];
+          const x1 = pts[i * 2], y1 = pts[i * 2 + 1];
+          if (Math.abs(x1 - x0) > halfW || Math.abs(y1 - y0) > halfH) continue;
+          this.trailCtx.globalAlpha = i / (len - 1);
+          this.trailCtx.beginPath();
+          this.trailCtx.moveTo(x0, y0);
+          this.trailCtx.lineTo(x1, y1);
+          this.trailCtx.stroke();
+        }
+      }
+      this.trailCtx.globalAlpha = 1;
+    }
+    this.ctx.drawImage(this.trailCanvas, 0, 0);
 
     if (this.wallNeedsUpdate) {
       this.wallCtx.clearRect(0, 0, this.wallCanvas.width, this.wallCanvas.height);
@@ -1014,12 +1078,9 @@ class Simulation {
     this.ctx.imageSmoothingEnabled = true;
 
     for (const food of this.food) {
-      if (!this.trailsEnabled || !food.glowDrawn) {
-        const glowSize = food.size * 4;
-        this.ctx.fillStyle = food.glowColor;
-        this.ctx.fillRect(food.position.x - glowSize / 2, food.position.y - glowSize / 2, glowSize, glowSize);
-        food.glowDrawn = true;
-      }
+      const glowSize = food.size * 4;
+      this.ctx.fillStyle = food.glowColor;
+      this.ctx.fillRect(food.position.x - glowSize / 2, food.position.y - glowSize / 2, glowSize, glowSize);
 
       const foodSize = food.size * 2;
       this.ctx.fillStyle = food.color;

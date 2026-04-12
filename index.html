@@ -186,6 +186,13 @@
             <span id="cohesion-value">1.0</span>
           </div>
         </div>
+        <div class="control-group">
+          <label for="trail-length">Trail Length:</label>
+          <div class="slider-row">
+            <input type="range" id="trail-length" min="0" max="120" step="1" value="10" />
+            <span id="trail-length-value">10</span>
+          </div>
+        </div>
         <div class="button-container">
           <button id="reset-btn" class="text-btn" title="Reset">Reset</button>
           <button id="clear-walls-btn" class="text-btn" title="Clear Walls">
@@ -193,7 +200,6 @@
           </button>
           <input type="file" id="bg-image-input" accept="image/*" hidden>
           <button id="bg-image-btn" class="text-btn" title="Set Background Image">Background</button>
-          <button id="trails-btn" class="text-btn" title="Toggle Trails">Trails: Off</button>
         </div>
       </div>
       <button id="minimize-btn" class="icon-btn minimize-btn">−</button>

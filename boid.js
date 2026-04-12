@@ -39,6 +39,8 @@ class Boid {
     this.velocity.x = (this.velocity.x / speed) * this.maxSpeed * 0.5;
     this.velocity.y = (this.velocity.y / speed) * this.maxSpeed * 0.5;
 
+    this.trail = [];
+
     this.isPredator = false;
     this.predatorDetectionRadius = 100; // how far prey can detect predators
     this.preyDetectionRadius = 150; // how far predators can detect prey

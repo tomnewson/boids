@@ -34,6 +34,10 @@ describe('Boid constructor', () => {
     expect(makeBoid().health).toBeGreaterThan(0);
   });
 
+  it('starts with an empty trail buffer', () => {
+    expect(makeBoid().trail).toEqual([]);
+  });
+
   it('assigns a unique id', () => {
     const a = makeBoid();
     const b = makeBoid();

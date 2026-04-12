@@ -104,13 +104,14 @@ describe('Simulation constructor', () => {
     expect(makeSimulation().bgImage).toBeNull();
   });
 
-  it('starts with bgImageDirty false', () => {
-    expect(makeSimulation().bgImageDirty).toBe(false);
+  it('starts with trails not persisting', () => {
+    expect(makeSimulation().trailsPersist).toBe(false);
   });
 
-  it('starts with trails disabled', () => {
-    expect(makeSimulation().trailsEnabled).toBe(false);
+  it('starts with trailCanvas null', () => {
+    expect(makeSimulation().trailCanvas).toBeNull();
   });
+
 
   it('initialises CURSOR_MODES enum', () => {
     const sim = makeSimulation();
@@ -134,11 +135,11 @@ describe('Simulation constructor', () => {
 // ─── updateParams ─────────────────────────────────────────────────────────────
 
 describe('Simulation.reset', () => {
-  it('marks bgImageDirty true to clear trails', () => {
+  it('empties the food array', () => {
     const sim = makeSimulation();
-    sim.bgImageDirty = false;
+    sim.food = [{ position: { x: 100, y: 100 }, size: 4, nutritionValue: 30, color: '#fff', glowColor: '#fff0' }];
     sim.reset();
-    expect(sim.bgImageDirty).toBe(true);
+    expect(sim.food).toEqual([]);
   });
 });
 
@@ -418,10 +419,11 @@ describe('Simulation.spawnFood', () => {
     expect(sim.food[0].nutritionValue).toBeGreaterThan(0);
   });
 
-  it('food starts with glowDrawn false', () => {
+  it('food has a color and glowColor', () => {
     const sim = makeSimulation();
     sim.spawnFood(200, 200);
-    expect(sim.food[0].glowDrawn).toBe(false);
+    expect(sim.food[0].color).toBeTruthy();
+    expect(sim.food[0].glowColor).toBeTruthy();
   });
 });
 
@@ -481,12 +483,6 @@ describe('Simulation.setBackgroundImage', () => {
     expect(sim.bgImage).toBe(img);
   });
 
-  it('marks bgImageDirty true', () => {
-    const sim = makeSimulation();
-    sim.setBackgroundImage({ naturalWidth: 800, naturalHeight: 600 });
-    expect(sim.bgImageDirty).toBe(true);
-  });
-
   it('replaces a previously set image', () => {
     const sim = makeSimulation();
     const first = { naturalWidth: 100, naturalHeight: 100 };
@@ -532,29 +528,31 @@ describe('Simulation.calcBgCrop', () => {
 
 // ─── toggleTrails ─────────────────────────────────────────────────────────────
 
-describe('Simulation.toggleTrails', () => {
-  it('enables trails when currently disabled', () => {
+describe('Simulation.setTrailLength', () => {
+  it('updates trailLength', () => {
     const sim = makeSimulation();
-    sim.toggleTrails();
-    expect(sim.trailsEnabled).toBe(true);
+    sim.setTrailLength(30, false);
+    expect(sim.trailLength).toBe(30);
   });
 
-  it('disables trails when currently enabled', () => {
+  it('sets trailsPersist to true when persist=true', () => {
     const sim = makeSimulation();
-    sim.toggleTrails();
-    sim.toggleTrails();
-    expect(sim.trailsEnabled).toBe(false);
+    sim.setTrailLength(120, true);
+    expect(sim.trailsPersist).toBe(true);
   });
 
-  it('returns the new state after toggling on', () => {
+  it('sets trailsPersist to false when persist=false', () => {
     const sim = makeSimulation();
-    expect(sim.toggleTrails()).toBe(true);
+    sim.setTrailLength(120, true);
+    sim.setTrailLength(30, false);
+    expect(sim.trailsPersist).toBe(false);
   });
 
-  it('returns the new state after toggling off', () => {
+  it('setting length 0 disables trail accumulation', () => {
     const sim = makeSimulation();
-    sim.toggleTrails();
-    expect(sim.toggleTrails()).toBe(false);
+    sim.setTrailLength(0, false);
+    expect(sim.trailLength).toBe(0);
+    expect(sim.trailsPersist).toBe(false);
   });
 });
 
