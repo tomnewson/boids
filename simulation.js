@@ -217,18 +217,21 @@ class Simulation {
   }
 
   setTrailLength(length, persist) {
-    this.trailLength = length;
+    const safeLength = Number.isFinite(+length) ? Math.max(0, Math.floor(+length)) : 0;
+    this.trailLength = safeLength;
     const wasPersisting = this.trailsPersist;
-    this.trailsPersist = persist;
-    // Immediately trim all boid trail buffers to the new length so existing
-    // trails shrink (or vanish) at once rather than draining one frame at a time.
-    const maxEntries = length * 2;
+    this.trailsPersist = Boolean(persist);
+    // Immediately trim non-persist trail buffers so existing trails shrink
+    // (or vanish) at once rather than draining one frame at a time.
+    // Note: in persist mode the accumulated canvas pixels are unaffected;
+    // only the in-memory buffer (used for non-persist redraw) is trimmed.
+    const maxEntries = safeLength * 2;
     for (const boid of this.boids) {
       if (boid.trail.length > maxEntries) {
         boid.trail.splice(0, boid.trail.length - maxEntries);
       }
     }
-    if (wasPersisting && !persist && this.trailCanvas) {
+    if (wasPersisting && !this.trailsPersist && this.trailCanvas) {
       this.trailCtx.clearRect(0, 0, this.trailCanvas.width, this.trailCanvas.height);
     }
   }
@@ -890,9 +893,14 @@ class Simulation {
 
       boid.update(timeScale);
 
-      // Record position for trail rendering (flat x,y pairs)
-      boid.trail.push(boid.position.x, boid.position.y);
-      if (boid.trail.length > this.trailLength * 2) boid.trail.splice(0, 2);
+      // Record position for trail rendering (flat x,y pairs).
+      // Skip when trails would never be shown to avoid pointless allocations.
+      if (this.trailsPersist || this.trailLength > 0) {
+        boid.trail.push(boid.position.x, boid.position.y);
+        if (!this.trailsPersist && boid.trail.length > this.trailLength * 2) {
+          boid.trail.splice(0, 2);
+        }
+      }
 
       if (this.food.length > 0) {
         const consumedFoodIndex = boid.checkFoodCollision(this.food);
@@ -1035,7 +1043,7 @@ class Simulation {
       }
     } else {
       // Redraw full trail history from position buffers each frame.
-      // Each segment drawn at increasing opacity: oldest → transparent, newest → opaque.
+      // Each segment drawn at increasing opacity: oldest → nearly transparent (1/n), newest → opaque.
       this.trailCtx.clearRect(0, 0, this.trailCanvas.width, this.trailCanvas.height);
       for (const boid of this.boids) {
         const pts = boid.trail;

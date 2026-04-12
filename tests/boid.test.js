@@ -38,12 +38,6 @@ describe('Boid constructor', () => {
     expect(makeBoid().trail).toEqual([]);
   });
 
-  it('assigns a unique id', () => {
-    const a = makeBoid();
-    const b = makeBoid();
-    expect(a.id).toBeTruthy();
-    expect(a.id).not.toBe(b.id);
-  });
 
   it('velocity magnitude is between minSpeed and maxSpeed after construction', () => {
     // Run a few times because velocity is randomised

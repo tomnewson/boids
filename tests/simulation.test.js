@@ -526,7 +526,7 @@ describe('Simulation.calcBgCrop', () => {
   });
 });
 
-// ─── toggleTrails ─────────────────────────────────────────────────────────────
+// ─── setTrailLength ───────────────────────────────────────────────────────────
 
 describe('Simulation.setTrailLength', () => {
   it('updates trailLength', () => {
